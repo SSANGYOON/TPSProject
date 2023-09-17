@@ -43,6 +43,8 @@ ATPSCharacter::ATPSCharacter()
 
 	Combat = CreateDefaultSubobject<UCombatComponent>(TEXT("CombatComponent"));
 	Combat->SetIsReplicated(true);
+
+	GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
 }
 
 void ATPSCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -79,6 +81,10 @@ void ATPSCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 		EnhancedInputComponent->BindAction(MovementAction, ETriggerEvent::Triggered, this, &ATPSCharacter::Move);
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ATPSCharacter::Look);
 		EnhancedInputComponent->BindAction(EquipAction, ETriggerEvent::Triggered, this, &ATPSCharacter::EquipButtonPressed);
+		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Triggered, this, &ATPSCharacter::CrouchButtonPressed);
+		EnhancedInputComponent->BindAction(AimStartAction, ETriggerEvent::Triggered, this, &ATPSCharacter::AimButtonPressed);
+		EnhancedInputComponent->BindAction(AimEndAction, ETriggerEvent::Triggered, this, &ATPSCharacter::AimButtonReleased);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ATPSCharacter::Jump);
 	}
 }
 
@@ -138,6 +144,39 @@ void ATPSCharacter::ServerEquipButtonPressed_Implementation()
 	}
 }
 
+void ATPSCharacter::CrouchButtonPressed()
+{
+	if (bIsCrouched)
+	{
+		UnCrouch();
+	}
+	else
+	{
+		Crouch();
+	}
+}
+
+void ATPSCharacter::AimButtonPressed()
+{
+	if (Combat)
+	{
+		Combat->SetAiming(true);
+	}
+}
+
+void ATPSCharacter::AimButtonReleased()
+{
+	if (Combat)
+	{
+		Combat->SetAiming(false);
+	}
+}
+
+void ATPSCharacter::Jump()
+{
+	Super::Jump();
+}
+
 void ATPSCharacter::SetOverlappingWeapon(AWeapon* Weapon)
 {
 	if (OverlappingWeapon)
@@ -164,5 +203,15 @@ void ATPSCharacter::OnRep_OverlappingWeapon(AWeapon* LastWeapon)
 	{
 		LastWeapon->ShowPickupWidget(false);
 	}
+}
+
+bool ATPSCharacter::IsWeaponEquipped()
+{
+	return (Combat && Combat->EquippedWeapon);
+}
+
+bool ATPSCharacter::IsAiming()
+{
+	return (Combat && Combat->bAiming);
 }
 
