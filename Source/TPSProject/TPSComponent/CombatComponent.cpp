@@ -5,6 +5,7 @@
 #include "TPSProject/Weapon/Weapon.h"
 #include "TPSProject/Character/TPSCharacter.h"
 #include "Engine/SkeletalMeshSocket.h"
+#include "Components/SphereComponent.h"
 
 UCombatComponent::UCombatComponent()
 {
