@@ -35,6 +35,7 @@ void UTPSAnimInstance::NativeUpdateAnimation(float DeltaTime)
 	bIsCrouched = TPSCharacter->bIsCrouched;
 	bAiming = TPSCharacter->IsAiming();
 	TurningInPlace = TPSCharacter->GetTurningInPlace();
+	bRotateRootBone = TPSCharacter->ShouldRotateRootBone();
 
 
 	// Offset Yaw for Strafing
@@ -62,6 +63,13 @@ void UTPSAnimInstance::NativeUpdateAnimation(float DeltaTime)
 		TPSCharacter->GetMesh()->TransformToBoneSpace(FName("hand_r"), LeftHandTransform.GetLocation(), FRotator::ZeroRotator, OutPosition, OutRotation);
 		LeftHandTransform.SetLocation(OutPosition);
 		LeftHandTransform.SetRotation(FQuat(OutRotation));
+
+		if (TPSCharacter->IsLocallyControlled())
+		{
+			bLocallyControlled = true;
+			FTransform RightHandTransform = TPSCharacter->GetMesh()->GetSocketTransform(FName("hand_r"), ERelativeTransformSpace::RTS_World);
+			FRotator LookAtRotation = UKismetMathLibrary::FindLookAtRotation(RightHandTransform.GetLocation(), RightHandTransform.GetLocation() + (RightHandTransform.GetLocation() - TPSCharacter->GetHitTarget()));
+			RightHandRotation = FMath::RInterpTo(RightHandRotation, LookAtRotation, DeltaTime, 30.f);
+		}
 	}
 }
-
