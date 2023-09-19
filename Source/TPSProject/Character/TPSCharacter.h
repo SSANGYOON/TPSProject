@@ -8,6 +8,7 @@
 #include "TPSProject/Types/TurningInPlace.h"
 #include "TPSProject/Interfaces/InteractWithCrosshairsInterface.h"
 #include "Components/TimelineComponent.h"
+#include "TPSProject/Types/CombatState.h"
 #include "TPSCharacter.generated.h"
 
 class UInputMappingContext;
@@ -33,6 +34,7 @@ public:
 	void PlayFireMontage(bool bAiming);
 	void PlayHitReactMontage();
 	void PlayElimMontage();
+	void PlayReloadMontage();
 
 	void Elim();
 	UFUNCTION(NetMulticast, Reliable)
@@ -71,6 +73,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category = Input)
 	UInputAction* FireAction;
 
+	UPROPERTY(EditAnywhere, Category = Input)
+	UInputAction* ReloadAction;
+
 	/*
 	Functions binded for input actions
 	*/
@@ -86,6 +91,7 @@ protected:
 	void Jump();
 	void FireStart();
 	void FireEnd();
+	void Reload();
 
 	void AimOffset(float DeltaTime);
 
@@ -113,7 +119,7 @@ private:
 	void OnRep_OverlappingWeapon(AWeapon* LastWeapon);
 
 	
-	UPROPERTY(VisibleAnywhere)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	class UCombatComponent* Combat;
 
 	UFUNCTION(Server, Reliable)
@@ -139,6 +145,9 @@ private:
 	UPROPERTY(EditAnywhere, Category = Combat)
 	UAnimMontage* ElimMontage;
 
+	UPROPERTY(EditAnywhere, Category = Combat)
+	UAnimMontage* ReloadMontage;
+
 	void HideCameraIfCharacterClose();
 
 	UPROPERTY(EditAnywhere)
@@ -161,6 +170,7 @@ private:
 	UFUNCTION()
 	void OnRep_Health();
 
+	UPROPERTY()
 	class ATPSController* TPSController;
 
 	bool bElimmed = false;
@@ -198,6 +208,7 @@ private:
 	UPROPERTY(EditAnywhere)
 	class USoundCue* ReaperSound;
 
+	UPROPERTY()
 	class ATPSPlayerState* TPSPlayerState;
 public:
 	void SetOverlappingWeapon(AWeapon* Weapon);
@@ -213,5 +224,6 @@ public:
 	FORCEINLINE bool IsElimmed() const { return bElimmed; }
 	FORCEINLINE float GetHealth() const { return Health; }
 	FORCEINLINE float GetMaxHealth() const { return MaxHealth; }
+	ECombatState GetCombatState() const;
 	FORCEINLINE ATPSController* GetController() const{ return TPSController; }
 };

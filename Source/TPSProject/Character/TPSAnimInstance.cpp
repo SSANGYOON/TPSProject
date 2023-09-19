@@ -6,6 +6,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "TPSProject/Weapon/Weapon.h"
+#include "TPSProject/Types/CombatState.h"
 
 void UTPSAnimInstance::NativeInitializeAnimation()
 {
@@ -73,4 +74,8 @@ void UTPSAnimInstance::NativeUpdateAnimation(float DeltaTime)
 			RightHandRotation = FMath::RInterpTo(RightHandRotation, LookAtRotation, DeltaTime, 30.f);
 		}
 	}
+
+	bUseFABRIK = TPSCharacter->GetCombatState() != ECombatState::ECS_Reloading;
+	bUseAimOffsets = TPSCharacter->GetCombatState() != ECombatState::ECS_Reloading;
+	bTransformRightHand = TPSCharacter->GetCombatState() != ECombatState::ECS_Reloading;
 }

@@ -26,6 +26,7 @@
 #include "TPSProject/GameMode/TPSGameMode.h"
 #include "TimerManager.h"
 #include "TPSProject/PlayerState/TPSPlayerState.h"
+#include "TPSProject/Weapon/WeaponTypes.h"
 
 ATPSCharacter::ATPSCharacter()
 {
@@ -101,6 +102,11 @@ void ATPSCharacter::Destroyed()
 
 void ATPSCharacter::MulticastElim_Implementation()
 {
+	if (TPSController)
+	{
+		TPSController->SetHUDWeaponAmmo(0);
+	}
+
 	bElimmed = true;
 	PlayElimMontage();
 
@@ -207,6 +213,27 @@ void ATPSCharacter::PlayElimMontage()
 	}
 }
 
+void ATPSCharacter::PlayReloadMontage()
+{
+	if (Combat == nullptr || Combat->EquippedWeapon == nullptr) return;
+
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (AnimInstance && ReloadMontage)
+	{
+		AnimInstance->Montage_Play(ReloadMontage);
+		FName SectionName;
+
+		switch (Combat->EquippedWeapon->GetWeaponType())
+		{
+		case EWeaponType::EWT_AssaultRifle:
+			SectionName = FName("Rifle");
+			break;
+		}
+
+		AnimInstance->Montage_JumpToSection(SectionName);
+	}
+}
+
 void ATPSCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -261,6 +288,7 @@ void ATPSCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ATPSCharacter::Jump);
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Started, this, &ATPSCharacter::FireStart);
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Completed, this, &ATPSCharacter::FireEnd);
+		EnhancedInputComponent->BindAction(ReloadAction, ETriggerEvent::Triggered, this, &ATPSCharacter::Reload);
 	}
 }
 
@@ -454,6 +482,14 @@ void ATPSCharacter::FireEnd()
 	}
 }
 
+void ATPSCharacter::Reload()
+{
+	if (Combat)
+	{
+		Combat->Reload();
+	}
+}
+
 void ATPSCharacter::TurnInPlace(float DeltaTime)
 {
 	if (AO_Yaw > 90.f)
@@ -591,4 +627,10 @@ FVector ATPSCharacter::GetHitTarget() const
 {
 	if (Combat == nullptr) return FVector();
 	return Combat->HitTarget;
+}
+
+ECombatState ATPSCharacter::GetCombatState() const
+{
+	if (Combat == nullptr) return ECombatState::ECS_MAX;
+	return Combat->CombatState;
 }
