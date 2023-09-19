@@ -36,6 +36,7 @@ void UTPSAnimInstance::NativeUpdateAnimation(float DeltaTime)
 	bAiming = TPSCharacter->IsAiming();
 	TurningInPlace = TPSCharacter->GetTurningInPlace();
 	bRotateRootBone = TPSCharacter->ShouldRotateRootBone();
+	bElimmed = TPSCharacter->IsElimmed();
 
 
 	// Offset Yaw for Strafing

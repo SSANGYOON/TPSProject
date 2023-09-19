@@ -5,9 +5,6 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Engine/SkeletalMeshSocket.h"
-#include "GameFramework/SpringArmComponent.h"
-#include "Camera/CameraComponent.h"
-#include "Components/InputComponent.h"
 #include "Particles/ParticleSystemComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -25,6 +22,10 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "TPSAnimInstance.h"
 #include "TPSProject/TPSProject.h"
+#include "TPSProject/PlayerController/TPSController.h"
+#include "TPSProject/GameMode/TPSGameMode.h"
+#include "TimerManager.h"
+#include "TPSProject/PlayerState/TPSPlayerState.h"
 
 ATPSCharacter::ATPSCharacter()
 {
@@ -54,6 +55,8 @@ ATPSCharacter::ATPSCharacter()
 	GetMesh()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Visibility, ECollisionResponse::ECR_Block);
 
 	TurningInPlace = ETurningInPlace::ETIP_NotTurning;
+
+	DissolveTimeline = CreateDefaultSubobject<UTimelineComponent>(TEXT("DissolveTimelineComponent"));
 }
 
 void ATPSCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -61,6 +64,7 @@ void ATPSCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME_CONDITION(ATPSCharacter, OverlappingWeapon, COND_OwnerOnly);
+	DOREPLIFETIME(ATPSCharacter, Health);
 }
 
 void ATPSCharacter::OnRep_ReplicatedMovement()
@@ -68,6 +72,103 @@ void ATPSCharacter::OnRep_ReplicatedMovement()
 	Super::OnRep_ReplicatedMovement();
 	SimProxiesTurn();
 	TimeSinceLastMovementReplication = 0.f;
+}
+
+void ATPSCharacter::Elim()
+{
+	if (Combat && Combat->EquippedWeapon)
+	{
+		Combat->EquippedWeapon->Dropped();
+	}
+	MulticastElim();
+	GetWorldTimerManager().SetTimer(
+		ElimTimer,
+		this,
+		&ATPSCharacter::ElimTimerFinished,
+		ElimDelay
+	);
+}
+
+void ATPSCharacter::Destroyed()
+{
+	Super::Destroyed();
+
+	if (ReaperComponent)
+	{
+		ReaperComponent->DestroyComponent();
+	}
+}
+
+void ATPSCharacter::MulticastElim_Implementation()
+{
+	bElimmed = true;
+	PlayElimMontage();
+
+	if (DissolveMaterialInstance)
+	{
+		DynamicDissolveMaterialInstance = UMaterialInstanceDynamic::Create(DissolveMaterialInstance, this);
+		GetMesh()->SetMaterial(0, DynamicDissolveMaterialInstance);
+		DynamicDissolveMaterialInstance->SetScalarParameterValue(TEXT("Dissolve"), 0.55f);
+		DynamicDissolveMaterialInstance->SetScalarParameterValue(TEXT("Glow"), 200.f);
+	}
+	StartDissolve();
+
+	GetCharacterMovement()->DisableMovement();
+	GetCharacterMovement()->StopMovementImmediately();
+	if (TPSController)
+	{
+		DisableInput(TPSController);
+	}
+
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// Spawn Reaper
+	if (ReaperEffect)
+	{
+		FVector ElimBotSpawnPoint(GetActorLocation().X, GetActorLocation().Y, GetActorLocation().Z + 200.f);
+		ReaperComponent = UGameplayStatics::SpawnEmitterAtLocation(
+			GetWorld(),
+			ReaperEffect,
+			ElimBotSpawnPoint,
+			GetActorRotation()
+		);
+	}
+	if (ReaperEffect)
+	{
+		UGameplayStatics::SpawnSoundAtLocation(
+			this,
+			ReaperSound,
+			GetActorLocation()
+		);
+	}
+}
+
+void ATPSCharacter::UpdateDissolveMaterial(float DissolveVaule)
+{
+	if (DynamicDissolveMaterialInstance)
+	{
+		DynamicDissolveMaterialInstance->SetScalarParameterValue(TEXT("Dissolve"), DissolveVaule);
+	}
+}
+
+void ATPSCharacter::StartDissolve()
+{
+	DissolveTrack.BindDynamic(this, &ATPSCharacter::UpdateDissolveMaterial);
+	if (DissolveCurve && DissolveTimeline)
+	{
+		DissolveTimeline->AddInterpFloat(DissolveCurve, DissolveTrack);
+		DissolveTimeline->Play();
+	}
+}
+
+void ATPSCharacter::ElimTimerFinished()
+{
+	ATPSGameMode* TPSGameMode = GetWorld()->GetAuthGameMode<ATPSGameMode>();
+	if (TPSGameMode)
+	{
+		TPSGameMode->RequestRespawn(this, Controller);
+	}
 }
 
 void ATPSCharacter::PlayFireMontage(bool bAiming)
@@ -91,21 +192,29 @@ void ATPSCharacter::PlayHitReactMontage()
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
 	if (AnimInstance && HitReactMontage)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("hir"))
 		AnimInstance->Montage_Play(HitReactMontage);
 		FName SectionName("FromFront");
 		AnimInstance->Montage_JumpToSection(SectionName);
 	}
 }
 
-void ATPSCharacter::MulticastHit_Implementation()
+void ATPSCharacter::PlayElimMontage()
 {
-	PlayHitReactMontage();
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (AnimInstance && ElimMontage)
+	{
+		AnimInstance->Montage_Play(ElimMontage);
+	}
 }
 
 void ATPSCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	UpdateHUDHealth();
+	if (HasAuthority())
+	{
+		OnTakeAnyDamage.AddDynamic(this, &ATPSCharacter::ReceiveDamage);
+	}
 
 	if (APlayerController* PlayerController = Cast<APlayerController>(Controller))
 	{
@@ -114,6 +223,7 @@ void ATPSCharacter::BeginPlay()
 			Subsystem->AddMappingContext(InputMappingContext, 0);
 		}
 	}
+
 }
 
 void ATPSCharacter::Tick(float DeltaTime)
@@ -133,6 +243,7 @@ void ATPSCharacter::Tick(float DeltaTime)
 		CalculateAO_Pitch();
 	}
 	HideCameraIfCharacterClose();
+	PollInit();
 }
 
 void ATPSCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -307,8 +418,6 @@ void ATPSCharacter::SimProxiesTurn()
 	ProxyRotation = GetActorRotation();
 	ProxyYaw = UKismetMathLibrary::NormalizedDeltaRotator(ProxyRotation, ProxyRotationLastFrame).Yaw;
 
-	UE_LOG(LogTemp, Warning, TEXT("ProxyYaw: %f"), ProxyYaw);
-
 	if (FMath::Abs(ProxyYaw) > TurnThreshold)
 	{
 		if (ProxyYaw > TurnThreshold)
@@ -384,6 +493,52 @@ void ATPSCharacter::HideCameraIfCharacterClose()
 		if (Combat && Combat->EquippedWeapon && Combat->EquippedWeapon->GetWeaponMesh())
 		{
 			Combat->EquippedWeapon->GetWeaponMesh()->bOwnerNoSee = false;
+		}
+	}
+}
+
+void ATPSCharacter::OnRep_Health()
+{
+	UpdateHUDHealth();
+	PlayHitReactMontage();
+}
+
+void ATPSCharacter::ReceiveDamage(AActor* DamagedActor, float Damage, const UDamageType* DamageType, AController* InstigatorController, AActor* DamageCauser)
+{
+	Health = FMath::Clamp(Health - Damage, 0.f, MaxHealth);
+	UpdateHUDHealth();
+	PlayHitReactMontage();
+
+	if (Health == 0.f)
+	{
+		ATPSGameMode* TPSGameMode = GetWorld()->GetAuthGameMode<ATPSGameMode>();
+		if (TPSGameMode)
+		{
+			TPSController = TPSController == nullptr ? Cast<ATPSController>(Controller) : TPSController;
+			ATPSController* AttackerController = Cast<ATPSController>(InstigatorController);
+			TPSGameMode->PlayerEliminated(this, TPSController, AttackerController);
+		}
+	}
+}
+
+void ATPSCharacter::UpdateHUDHealth()
+{
+	TPSController = TPSController == nullptr ? Cast<ATPSController>(Controller) : TPSController;
+	if (TPSController)
+	{
+		TPSController->SetHUDHealth(Health, MaxHealth);
+	}
+}
+
+void ATPSCharacter::PollInit()
+{
+	if (TPSPlayerState == nullptr)
+	{
+		TPSPlayerState = GetPlayerState<ATPSPlayerState>();
+		if (TPSPlayerState)
+		{
+			TPSPlayerState->AddToScore(0.f);
+			TPSPlayerState->AddToDefeats(0);
 		}
 	}
 }

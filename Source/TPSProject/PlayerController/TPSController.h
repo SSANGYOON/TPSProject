@@ -13,5 +13,15 @@ UCLASS()
 class TPSPROJECT_API ATPSController : public APlayerController
 {
 	GENERATED_BODY()
+public:
+	void SetHUDHealth(float Health, float MaxHealth);
+	void SetHUDScore(float Score);
+	void SetHUDDefeats(int32 Defeats);
+protected:
+	virtual void BeginPlay() override;
+	virtual void OnPossess(APawn* InPawn) override;
+
+private:
+	class ATPSHUD* TPSHUD;
 	
 };
