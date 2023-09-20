@@ -314,7 +314,10 @@ void ATPSController::HandleMatchHasStarted()
 	TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
 	if (TPSHUD)
 	{
-		TPSHUD->AddCharacterOverlay();
+		if (TPSHUD->CharacterOverlay == nullptr)
+		{
+			TPSHUD->AddCharacterOverlay();
+		}
 		if (TPSHUD->Announcement)
 		{
 			TPSHUD->Announcement->SetVisibility(ESlateVisibility::Hidden);
