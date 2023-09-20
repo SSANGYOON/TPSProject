@@ -4,12 +4,21 @@
 #include "TPSHUD.h"
 #include "GameFramework/PlayerController.h"
 #include "CharacterOverlay.h"
+#include "Announcement.h"
 
 void ATPSHUD::BeginPlay()
 {
 	Super::BeginPlay();
+}
 
-	AddCharacterOverlay();
+void ATPSHUD::AddAnnouncement()
+{
+	APlayerController* PlayerController = GetOwningPlayerController();
+	if (PlayerController && AnnouncementClass)
+	{
+		Announcement = CreateWidget<UAnnouncement>(PlayerController, AnnouncementClass);
+		Announcement->AddToViewport();
+	}
 }
 
 void ATPSHUD::AddCharacterOverlay()

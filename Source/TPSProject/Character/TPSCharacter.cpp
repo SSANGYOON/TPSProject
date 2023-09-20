@@ -66,6 +66,7 @@ void ATPSCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 	DOREPLIFETIME_CONDITION(ATPSCharacter, OverlappingWeapon, COND_OwnerOnly);
 	DOREPLIFETIME(ATPSCharacter, Health);
+	DOREPLIFETIME(ATPSCharacter, bDisableGameplay);
 }
 
 void ATPSCharacter::OnRep_ReplicatedMovement()
@@ -98,6 +99,10 @@ void ATPSCharacter::Destroyed()
 	{
 		ReaperComponent->DestroyComponent();
 	}
+	if (Combat && Combat->EquippedWeapon)
+	{
+		Combat->EquippedWeapon->Destroy();
+	}
 }
 
 void ATPSCharacter::MulticastElim_Implementation()
@@ -119,11 +124,11 @@ void ATPSCharacter::MulticastElim_Implementation()
 	}
 	StartDissolve();
 
-	GetCharacterMovement()->DisableMovement();
-	GetCharacterMovement()->StopMovementImmediately();
-	if (TPSController)
+	// Disable character movement
+	bDisableGameplay = true;
+	if (Combat)
 	{
-		DisableInput(TPSController);
+		Combat->FireButtonPressed(false);
 	}
 
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -243,11 +248,10 @@ void ATPSCharacter::BeginPlay()
 		OnTakeAnyDamage.AddDynamic(this, &ATPSCharacter::ReceiveDamage);
 	}
 
-	if (APlayerController* PlayerController = Cast<APlayerController>(Controller))
-	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
-		{
+	if (APlayerController* PlayerController = Cast<APlayerController>(GetController())) {
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer())) {
 			Subsystem->AddMappingContext(InputMappingContext, 0);
+			bInputsSet = true; //successful
 		}
 	}
 
@@ -256,6 +260,33 @@ void ATPSCharacter::BeginPlay()
 void ATPSCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	if (HasAuthority() && !bInputsSet && Controller)
+	{
+		TPSController = !TPSController ? Cast<ATPSController>(Controller) : TPSController;
+		if (TPSController)
+		{
+			if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(TPSController->GetLocalPlayer()))
+			{
+				Subsystem->AddMappingContext(InputMappingContext, 0);
+				bInputsSet = true; //successful
+			}
+		}
+	}
+
+	RotateInPlace(DeltaTime);
+	HideCameraIfCharacterClose();
+	PollInit();
+}
+
+void ATPSCharacter::RotateInPlace(float DeltaTime)
+{
+	if (bDisableGameplay)
+	{
+		bUseControllerRotationYaw = false;
+		TurningInPlace = ETurningInPlace::ETIP_NotTurning;
+		return;
+	}
 	if (GetLocalRole() > ENetRole::ROLE_SimulatedProxy && IsLocallyControlled())
 	{
 		AimOffset(DeltaTime);
@@ -269,8 +300,6 @@ void ATPSCharacter::Tick(float DeltaTime)
 		}
 		CalculateAO_Pitch();
 	}
-	HideCameraIfCharacterClose();
-	PollInit();
 }
 
 void ATPSCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -303,6 +332,7 @@ void ATPSCharacter::PostInitializeComponents()
 
 void ATPSCharacter::Move(const FInputActionValue& value)
 {
+	if (bDisableGameplay) return;
 	const FVector2D MovementVector = value.Get<FVector2D>();
 
 	const FRotator Rotation = Controller->GetControlRotation();
@@ -327,6 +357,7 @@ void ATPSCharacter::Look(const FInputActionValue& value)
 
 void ATPSCharacter::EquipButtonPressed()
 {
+	if (bDisableGameplay) return;
 	if (Combat)
 	{
 		if (HasAuthority())
@@ -350,6 +381,7 @@ void ATPSCharacter::ServerEquipButtonPressed_Implementation()
 
 void ATPSCharacter::CrouchButtonPressed()
 {
+	if (bDisableGameplay) return;
 	if (bIsCrouched)
 	{
 		UnCrouch();
@@ -362,6 +394,7 @@ void ATPSCharacter::CrouchButtonPressed()
 
 void ATPSCharacter::AimButtonPressed()
 {
+	if (bDisableGameplay) return;
 	if (Combat)
 	{
 		Combat->SetAiming(true);
@@ -370,6 +403,7 @@ void ATPSCharacter::AimButtonPressed()
 
 void ATPSCharacter::AimButtonReleased()
 {
+	if (bDisableGameplay) return;
 	if (Combat)
 	{
 		Combat->SetAiming(false);
@@ -378,7 +412,15 @@ void ATPSCharacter::AimButtonReleased()
 
 void ATPSCharacter::Jump()
 {
-	Super::Jump();
+	if (bDisableGameplay) return;
+	if (bIsCrouched)
+	{
+		UnCrouch();
+	}
+	else
+	{
+		Super::Jump();
+	}
 }
 
 float ATPSCharacter::CalculateSpeed()
@@ -468,6 +510,7 @@ void ATPSCharacter::SimProxiesTurn()
 
 void ATPSCharacter::FireStart()
 {
+	if (bDisableGameplay) return;
 	if (Combat)
 	{
 		Combat->FireButtonPressed(true);
@@ -476,6 +519,7 @@ void ATPSCharacter::FireStart()
 
 void ATPSCharacter::FireEnd()
 {
+	if (bDisableGameplay) return;
 	if (Combat)
 	{
 		Combat->FireButtonPressed(false);
@@ -484,6 +528,7 @@ void ATPSCharacter::FireEnd()
 
 void ATPSCharacter::Reload()
 {
+	if (bDisableGameplay) return;
 	if (Combat)
 	{
 		Combat->Reload();
