@@ -35,6 +35,7 @@ public:
 	void PlayHitReactMontage();
 	void PlayElimMontage();
 	void PlayReloadMontage();
+	void PlayThrowGrenadeMontage();
 
 	void Elim();
 	UFUNCTION(NetMulticast, Reliable)
@@ -82,6 +83,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category = Input)
 	UInputAction* ReloadAction;
 
+	UPROPERTY(EditAnywhere, Category = Input)
+	UInputAction* ThrowAction;
+
 	/*
 	Functions binded for input actions
 	*/
@@ -98,6 +102,7 @@ protected:
 	void FireStart();
 	void FireEnd();
 	void Reload();
+	void GrenadeThrow();
 
 	void AimOffset(float DeltaTime);
 
@@ -155,6 +160,9 @@ private:
 
 	UPROPERTY(EditAnywhere, Category = Combat)
 	UAnimMontage* ReloadMontage;
+
+	UPROPERTY(EditAnywhere, Category = Combat)
+	UAnimMontage* ThrowGrenadeMontage;
 
 	void HideCameraIfCharacterClose();
 
@@ -218,6 +226,10 @@ private:
 
 	UPROPERTY()
 	class ATPSPlayerState* TPSPlayerState;
+
+	UPROPERTY(VisibleAnywhere)
+	UStaticMeshComponent* AttachedGrenade;
+
 public:
 	void SetOverlappingWeapon(AWeapon* Weapon);
 	bool IsWeaponEquipped();
@@ -237,4 +249,5 @@ public:
 	FORCEINLINE UCombatComponent* GetCombat() const { return Combat; }
 	FORCEINLINE bool GetDisableGameplay() const { return bDisableGameplay; }
 	FORCEINLINE UAnimMontage* GetReloadMontage() const { return ReloadMontage; }
+	FORCEINLINE UStaticMeshComponent* GetAttachedGrenade() const { return AttachedGrenade; }
 };

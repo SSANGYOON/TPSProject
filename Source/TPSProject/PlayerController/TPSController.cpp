@@ -215,6 +215,23 @@ void ATPSController::SetHUDAnnouncementCountdown(float CountdownTime)
 	}
 }
 
+void ATPSController::SetHUDGrenades(int32 Grenades)
+{
+	TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
+	bool bHUDValid = TPSHUD &&
+		TPSHUD->CharacterOverlay &&
+		TPSHUD->CharacterOverlay->GrenadesText;
+	if (bHUDValid)
+	{
+		FString GrenadesText = FString::Printf(TEXT("%d"), Grenades);
+		TPSHUD->CharacterOverlay->GrenadesText->SetText(FText::FromString(GrenadesText));
+	}
+	else
+	{
+		HUDGrenades = Grenades;
+	}
+}
+
 void ATPSController::SetHUDTime()
 {
 	float TimeLeft = 0.f;

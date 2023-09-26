@@ -58,6 +58,10 @@ ATPSCharacter::ATPSCharacter()
 	TurningInPlace = ETurningInPlace::ETIP_NotTurning;
 
 	DissolveTimeline = CreateDefaultSubobject<UTimelineComponent>(TEXT("DissolveTimelineComponent"));
+
+	AttachedGrenade = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Attached Grenade"));
+	AttachedGrenade->SetupAttachment(GetMesh(), FName("GrenadeSocket"));
+	AttachedGrenade->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
 void ATPSCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -267,6 +271,15 @@ void ATPSCharacter::PlayReloadMontage()
 	}
 }
 
+void ATPSCharacter::PlayThrowGrenadeMontage()
+{
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (AnimInstance && ThrowGrenadeMontage)
+	{
+		AnimInstance->Montage_Play(ThrowGrenadeMontage);
+	}
+}
+
 void ATPSCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -274,6 +287,11 @@ void ATPSCharacter::BeginPlay()
 	if (HasAuthority())
 	{
 		OnTakeAnyDamage.AddDynamic(this, &ATPSCharacter::ReceiveDamage);
+	}
+
+	if (AttachedGrenade)
+	{
+		AttachedGrenade->SetVisibility(false);
 	}
 
 	if (APlayerController* PlayerController = Cast<APlayerController>(GetController())) {
@@ -346,6 +364,7 @@ void ATPSCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Started, this, &ATPSCharacter::FireStart);
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Completed, this, &ATPSCharacter::FireEnd);
 		EnhancedInputComponent->BindAction(ReloadAction, ETriggerEvent::Triggered, this, &ATPSCharacter::Reload);
+		EnhancedInputComponent->BindAction(ThrowAction, ETriggerEvent::Triggered, this, &ATPSCharacter::GrenadeThrow);
 	}
 }
 
@@ -563,6 +582,14 @@ void ATPSCharacter::Reload()
 	}
 }
 
+void ATPSCharacter::GrenadeThrow()
+{
+	if (Combat)
+	{
+		Combat->ThrowGrenade();
+	}
+}
+
 void ATPSCharacter::TurnInPlace(float DeltaTime)
 {
 	if (AO_Yaw > 90.f)
@@ -614,6 +641,7 @@ void ATPSCharacter::OnRep_Health()
 
 void ATPSCharacter::ReceiveDamage(AActor* DamagedActor, float Damage, const UDamageType* DamageType, AController* InstigatorController, AActor* DamageCauser)
 {
+	if (bElimmed) return;
 	Health = FMath::Clamp(Health - Damage, 0.f, MaxHealth);
 	UpdateHUDHealth();
 	PlayHitReactMontage();
