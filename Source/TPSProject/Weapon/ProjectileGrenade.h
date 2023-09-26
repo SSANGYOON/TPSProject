@@ -21,8 +21,13 @@ protected:
 
 	UFUNCTION()
 	void OnBounce(const FHitResult& ImpactResult, const FVector& ImpactVelocity);
+
+	UFUNCTION()
+	void RestoreCollision();
 private:
 
 	UPROPERTY(EditAnywhere)
 	USoundCue* BounceSound;
+
+	FTimerHandle CollisionTimer;
 };

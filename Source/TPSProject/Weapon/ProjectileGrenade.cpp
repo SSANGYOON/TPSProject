@@ -5,7 +5,8 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundCue.h"
-
+#include "Components/Boxcomponent.h"
+#include "TPSProject/TPSProject.h"
 AProjectileGrenade::AProjectileGrenade()
 {
 	ProjectileMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Grenade Mesh"));
@@ -25,6 +26,13 @@ void AProjectileGrenade::BeginPlay()
 	SpawnTrailSystem();
 	StartDestroyTimer();
 
+	GetWorldTimerManager().SetTimer(
+		CollisionTimer,
+		this,
+		&AProjectileGrenade::RestoreCollision,
+		0.2f
+	);
+
 	ProjectileMovementComponent->OnProjectileBounce.AddDynamic(this, &AProjectileGrenade::OnBounce);
 }
 
@@ -38,6 +46,11 @@ void AProjectileGrenade::OnBounce(const FHitResult& ImpactResult, const FVector&
 			GetActorLocation()
 		);
 	}
+}
+
+void AProjectileGrenade::RestoreCollision()
+{
+	CollisionBox->SetCollisionResponseToChannel(ECC_SkeletalMesh, ECollisionResponse::ECR_Block);
 }
 
 void AProjectileGrenade::Destroyed()

@@ -35,7 +35,7 @@ public:
 	void PlayHitReactMontage();
 	void PlayElimMontage();
 	void PlayReloadMontage();
-	void PlayThrowGrenadeMontage();
+	void PlayThrowGrenadeMontage(const FName& SectionName);
 
 	void Elim();
 	UFUNCTION(NetMulticast, Reliable)
@@ -47,6 +47,9 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent)
 	void ShowSniperScopeWidget(bool bShowScope);
+
+	UFUNCTION(BlueprintImplementableEvent)
+	void UpdateSplineMesh();
 
 protected:
 	virtual void BeginPlay() override;
@@ -103,6 +106,7 @@ protected:
 	void FireEnd();
 	void Reload();
 	void GrenadeThrow();
+	void GrenadeStop();
 
 	void AimOffset(float DeltaTime);
 
@@ -131,7 +135,7 @@ private:
 	UFUNCTION()
 	void OnRep_OverlappingWeapon(AWeapon* LastWeapon);
 
-	
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	class UCombatComponent* Combat;
 
@@ -230,6 +234,15 @@ private:
 	UPROPERTY(VisibleAnywhere)
 	UStaticMeshComponent* AttachedGrenade;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	class USplineComponent* GrenadeSpline;
+
+	UPROPERTY(VisibleAnywhere)
+	UStaticMeshComponent* ArcEndSphere;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, meta = (AllowPrivateAccess = "true"))
+	TArray<class USplineMeshComponent*> SplineMeshes;
+
 public:
 	void SetOverlappingWeapon(AWeapon* Weapon);
 	bool IsWeaponEquipped();
@@ -245,9 +258,12 @@ public:
 	FORCEINLINE float GetHealth() const { return Health; }
 	FORCEINLINE float GetMaxHealth() const { return MaxHealth; }
 	ECombatState GetCombatState() const;
-	FORCEINLINE ATPSController* GetController() const{ return TPSController; }
+	FORCEINLINE ATPSController* GetController() const { return TPSController; }
 	FORCEINLINE UCombatComponent* GetCombat() const { return Combat; }
 	FORCEINLINE bool GetDisableGameplay() const { return bDisableGameplay; }
 	FORCEINLINE UAnimMontage* GetReloadMontage() const { return ReloadMontage; }
 	FORCEINLINE UStaticMeshComponent* GetAttachedGrenade() const { return AttachedGrenade; }
+	FORCEINLINE USplineComponent* GetGrenadeSpline() const { return GrenadeSpline; }
+	FORCEINLINE UStaticMeshComponent* GetArcEndSphere() const { return ArcEndSphere; }
+	void ClearSplineMeshes();
 };

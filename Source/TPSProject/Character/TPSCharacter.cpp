@@ -27,6 +27,9 @@
 #include "TimerManager.h"
 #include "TPSProject/PlayerState/TPSPlayerState.h"
 #include "TPSProject/Weapon/WeaponTypes.h"
+#include "TPSProject/Types/CombatState.h"
+#include "Components/SplineComponent.h"
+#include "Components/SplineMeshComponent.h"
 
 ATPSCharacter::ATPSCharacter()
 {
@@ -62,6 +65,10 @@ ATPSCharacter::ATPSCharacter()
 	AttachedGrenade = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Attached Grenade"));
 	AttachedGrenade->SetupAttachment(GetMesh(), FName("GrenadeSocket"));
 	AttachedGrenade->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	GrenadeSpline = CreateDefaultSubobject<USplineComponent>(TEXT("GrenadeSpline"));
+
+	ArcEndSphere = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Arc End Sphere"));
 }
 
 void ATPSCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -271,12 +278,13 @@ void ATPSCharacter::PlayReloadMontage()
 	}
 }
 
-void ATPSCharacter::PlayThrowGrenadeMontage()
+void ATPSCharacter::PlayThrowGrenadeMontage(const FName& SectionName)
 {
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
 	if (AnimInstance && ThrowGrenadeMontage)
 	{
 		AnimInstance->Montage_Play(ThrowGrenadeMontage);
+		AnimInstance->Montage_JumpToSection(SectionName);
 	}
 }
 
@@ -364,7 +372,8 @@ void ATPSCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Started, this, &ATPSCharacter::FireStart);
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Completed, this, &ATPSCharacter::FireEnd);
 		EnhancedInputComponent->BindAction(ReloadAction, ETriggerEvent::Triggered, this, &ATPSCharacter::Reload);
-		EnhancedInputComponent->BindAction(ThrowAction, ETriggerEvent::Triggered, this, &ATPSCharacter::GrenadeThrow);
+		EnhancedInputComponent->BindAction(ThrowAction, ETriggerEvent::Started, this, &ATPSCharacter::GrenadeThrow);
+		EnhancedInputComponent->BindAction(ThrowAction, ETriggerEvent::Completed, this, &ATPSCharacter::GrenadeStop);
 	}
 }
 
@@ -483,7 +492,7 @@ void ATPSCharacter::AimOffset(float DeltaTime)
 	float Speed = CalculateSpeed();
 	bool bIsInAir = GetCharacterMovement()->IsFalling();
 
-	if (Speed == 0.f && !bIsInAir) // standing still, not jumping
+	if (Speed == 0.f && !bIsInAir && Combat->CombatState < ECombatState::ECS_GrenadeStart) // standing still, not jumping
 	{
 		bRotateRootBone = true;
 		FRotator CurrentAimRotation = FRotator(0.f, GetBaseAimRotation().Yaw, 0.f);
@@ -496,7 +505,7 @@ void ATPSCharacter::AimOffset(float DeltaTime)
 		bUseControllerRotationYaw = true;
 		TurnInPlace(DeltaTime);
 	}
-	if (Speed > 0.f || bIsInAir) // running, or jumping
+	else // running, or jumping
 	{
 		bRotateRootBone = false;
 		StartingAimRotation = FRotator(0.f, GetBaseAimRotation().Yaw, 0.f);
@@ -558,6 +567,10 @@ void ATPSCharacter::SimProxiesTurn()
 void ATPSCharacter::FireStart()
 {
 	if (bDisableGameplay) return;
+	if (Combat->CombatState == ECombatState::ECS_GrenadeAim)
+	{
+		Combat->ThrowGrenade();
+	}
 	if (Combat)
 	{
 		Combat->FireButtonPressed(true);
@@ -586,7 +599,15 @@ void ATPSCharacter::GrenadeThrow()
 {
 	if (Combat)
 	{
-		Combat->ThrowGrenade();
+		Combat->StartGrenade();
+	}
+}
+
+void ATPSCharacter::GrenadeStop()
+{
+	if (Combat)
+	{
+		Combat->StopGrenade();
 	}
 }
 
@@ -734,4 +755,13 @@ ECombatState ATPSCharacter::GetCombatState() const
 {
 	if (Combat == nullptr) return ECombatState::ECS_MAX;
 	return Combat->CombatState;
+}
+
+void ATPSCharacter::ClearSplineMeshes()
+{
+	for (auto SplineMesh : SplineMeshes)
+	{
+		SplineMesh->DestroyComponent();
+	}
+	SplineMeshes.Empty();
 }

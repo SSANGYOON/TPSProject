@@ -16,8 +16,8 @@
 #include "Sound/SoundCue.h"
 #include "TPSProject/Character/TPSAnimInstance.h"
 #include "TPSProject/Weapon/Projectile.h"
-
-
+#include "Components/SplineComponent.h"
+#include "Components/SplineMeshComponent.h"
 UCombatComponent::UCombatComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -75,6 +75,33 @@ void UCombatComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActo
 
 		SetHUDCrosshairs(DeltaTime);
 		InterpFOV(DeltaTime);
+
+		USplineComponent* Spline = Character->GetGrenadeSpline();
+
+		Spline->ClearSplinePoints();
+		Character->ClearSplineMeshes();
+
+		if (CombatState == ECombatState::ECS_GrenadeAim)
+		{
+			FVector InStartLocation = Character->GetAttachedGrenade()->GetComponentLocation();
+			FVector InLaunchVelocity = (HitTarget - InStartLocation).GetSafeNormal() * 2000.f;
+			FPredictProjectilePathParams PredictParams(5.f, InStartLocation, InLaunchVelocity, 3, ECollisionChannel::ECC_Visibility, Character);
+			FPredictProjectilePathResult Results;
+			UGameplayStatics::PredictProjectilePath(Character, PredictParams, Results);
+				
+			for (auto& Result : Results.PathData)
+			{
+				Spline->AddSplinePoint(Result.Location, ESplineCoordinateSpace::Local, true);
+			}
+			Spline->SetSplinePointType(Results.PathData.Num() - 1, ESplinePointType::CurveClamped, true);
+			Character->GetArcEndSphere()->SetVisibility(true);
+			Character->GetArcEndSphere()->SetWorldLocation(Results.PathData.Last(0).Location);
+			Character->UpdateSplineMesh();
+		}
+		else
+		{
+			Character->GetArcEndSphere()->SetVisibility(false);
+		}
 	}
 }
 
@@ -324,6 +351,12 @@ void UCombatComponent::JumpToShotgunEnd()
 	}
 }
 
+void UCombatComponent::GrenadeAimStart()
+{
+	CombatState = ECombatState::ECS_GrenadeAim;
+	AttachActorToLeftHand(EquippedWeapon);
+}
+
 void UCombatComponent::ThrowGrenadeFinished()
 {
 	CombatState = ECombatState::ECS_Unoccupied;
@@ -374,11 +407,17 @@ void UCombatComponent::OnRep_CombatState()
 			Fire();
 		}
 		break;
+	case ECombatState::ECS_GrenadeStart:
+		if (Character && !Character->IsLocallyControlled())
+		{
+			AttachActorToLeftHand(EquippedWeapon);
+			Character->PlayThrowGrenadeMontage(FName("Start"));
+		}
+		break;
 	case ECombatState::ECS_ThrowingGrenade:
 		if (Character && !Character->IsLocallyControlled())
 		{
-			Character->PlayThrowGrenadeMontage();
-			AttachActorToLeftHand(EquippedWeapon);
+			Character->PlayThrowGrenadeMontage(FName("Throw"));
 		}
 		break;
 	}
@@ -420,16 +459,81 @@ int32 UCombatComponent::AmountToReload()
 	return 0;
 }
 
-void UCombatComponent::ThrowGrenade()
+void UCombatComponent::StartGrenade()
 {
 	if (Grenades == 0) return;
 	if (CombatState != ECombatState::ECS_Unoccupied || EquippedWeapon == nullptr) return;
+	CombatState = ECombatState::ECS_GrenadeStart;
+	if (Character)
+	{
+		AttachActorToLeftHand(EquippedWeapon);
+		Character->PlayThrowGrenadeMontage(FName("Start"));	
+		ShowAttachedGrenade(true);
+	}
+	if (Character && !Character->HasAuthority())
+	{
+		ServerStartGrenade();
+	}
+	if (Character && Character->HasAuthority())
+	{
+		//Grenades = FMath::Clamp(Grenades - 1, 0, MaxGrenades);
+		//UpdateHUDGrenades();
+	}
+}
+
+void UCombatComponent::ServerStartGrenade_Implementation()
+{
+	if (Grenades == 0) return;
+	CombatState = ECombatState::ECS_GrenadeStart;
+	if (Character)
+	{
+		AttachActorToLeftHand(EquippedWeapon);
+		Character->PlayThrowGrenadeMontage(FName("Start"));
+		ShowAttachedGrenade(true);
+	}
+	//Grenades = FMath::Clamp(Grenades - 1, 0, MaxGrenades);
+	//UpdateHUDGrenades();
+}
+
+void UCombatComponent::StopGrenade()
+{
+	if (CombatState != ECombatState::ECS_GrenadeAim && CombatState != ECombatState::ECS_GrenadeStart || EquippedWeapon == nullptr || Character == nullptr) return;
+	CombatState = ECombatState::ECS_Unoccupied;
+
+	AttachActorToRightHand(EquippedWeapon);
+	ShowAttachedGrenade(false);
+
+	if (!Character->HasAuthority())
+	{
+		ServerStopGrenade();
+	}
+	else
+	{
+		MulticastStopGrenade();
+	}
+}
+
+void UCombatComponent::ServerStopGrenade_Implementation()
+{
+	MulticastStopGrenade();
+}
+
+void UCombatComponent::MulticastStopGrenade_Implementation()
+{
+	CombatState = ECombatState::ECS_Unoccupied;
+	if (Character && !Character->IsLocallyControlled())
+	{
+		AttachActorToRightHand(EquippedWeapon);
+		ShowAttachedGrenade(false);
+	}
+}
+
+void UCombatComponent::ThrowGrenade()
+{
 	CombatState = ECombatState::ECS_ThrowingGrenade;
 	if (Character)
 	{
-		Character->PlayThrowGrenadeMontage();
-		AttachActorToLeftHand(EquippedWeapon);
-		ShowAttachedGrenade(true);
+		Character->PlayThrowGrenadeMontage(FName("Throw"));
 	}
 	if (Character && !Character->HasAuthority())
 	{
@@ -444,13 +548,10 @@ void UCombatComponent::ThrowGrenade()
 
 void UCombatComponent::ServerThrowGrenade_Implementation()
 {
-	if (Grenades == 0) return;
 	CombatState = ECombatState::ECS_ThrowingGrenade;
 	if (Character)
 	{
-		Character->PlayThrowGrenadeMontage();
-		AttachActorToLeftHand(EquippedWeapon);
-		ShowAttachedGrenade(true);
+		Character->PlayThrowGrenadeMontage(FName("Throw"));
 	}
 	Grenades = FMath::Clamp(Grenades - 1, 0, MaxGrenades);
 	UpdateHUDGrenades();

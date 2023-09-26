@@ -78,4 +78,5 @@ void UTPSAnimInstance::NativeUpdateAnimation(float DeltaTime)
 	bUseFABRIK = TPSCharacter->GetCombatState() == ECombatState::ECS_Unoccupied;
 	bUseAimOffsets = TPSCharacter->GetCombatState() == ECombatState::ECS_Unoccupied && !TPSCharacter->GetDisableGameplay();
 	bTransformRightHand = TPSCharacter->GetCombatState() == ECombatState::ECS_Unoccupied && !TPSCharacter->GetDisableGameplay();
+	bGrenadeAiming = TPSCharacter->GetCombatState() == ECombatState::ECS_GrenadeAim && !TPSCharacter->GetDisableGameplay();
 }

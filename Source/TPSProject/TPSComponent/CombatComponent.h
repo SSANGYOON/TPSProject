@@ -36,6 +36,9 @@ public:
 	void JumpToShotgunEnd();
 
 	UFUNCTION(BlueprintCallable)
+	void GrenadeAimStart();
+
+	UFUNCTION(BlueprintCallable)
 	void ThrowGrenadeFinished();
 
 	UFUNCTION(BlueprintCallable)
@@ -72,7 +75,18 @@ protected:
 	void HandleReload();
 	int32 AmountToReload();
 
+	void StartGrenade();
 	void ThrowGrenade();
+	void StopGrenade();
+
+	UFUNCTION(Server, Reliable)
+	void ServerStartGrenade();
+
+	UFUNCTION(Server, Reliable)
+	void ServerStopGrenade();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastStopGrenade();
 
 	UFUNCTION(Server, Reliable)
 	void ServerThrowGrenade();
@@ -202,5 +216,4 @@ private:
 
 public:
 	FORCEINLINE int32 GetGrenades() const { return Grenades; }
-
 };
