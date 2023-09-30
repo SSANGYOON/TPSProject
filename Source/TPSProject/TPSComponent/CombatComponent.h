@@ -19,11 +19,13 @@ class TPSPROJECT_API UCombatComponent : public UActorComponent
 public:	
 	UCombatComponent();
 	friend class ATPSCharacter;
+	friend class UBuffComponent;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	
 
 	void EquipWeapon(class AWeapon* WeaponToEquip);
+	void SwapWeapons();
 	void Reload();
 	UFUNCTION(BlueprintCallable)
 	void FinishReloading();
@@ -47,6 +49,8 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerLaunchGrenade(const FVector_NetQuantize& Target);
 
+	void PickupAmmo(EWeaponType WeaponType, int32 AmmoAmount);
+
 protected:
 	virtual void BeginPlay() override;
 	void SetAiming(bool bIsAiming);
@@ -56,6 +60,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_EquippedWeapon();
+
+	UFUNCTION()
+	void OnRep_SecondaryWeapon();
 
 	void Fire();
 
@@ -97,10 +104,13 @@ protected:
 	void DropEquippedWeapon();
 	void AttachActorToRightHand(AActor* ActorToAttach);
 	void AttachActorToLeftHand(AActor* ActorToAttach);
+	void AttachActorToBackpack(AActor* ActorToAttach);
 	void UpdateCarriedAmmo();
-	void PlayEquipWeaponSound();
+	void PlayEquipWeaponSound(AWeapon* WeaponToEquip);
 	void ReloadEmptyWeapon();
 	void ShowAttachedGrenade(bool bShowGrenade);
+	void EquipPrimaryWeapon(AWeapon* WeaponToEquip);
+	void EquipSecondaryWeapon(AWeapon* WeaponToEquip);
 private:
 	UPROPERTY()
 	class ATPSCharacter* Character;
@@ -112,20 +122,23 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_EquippedWeapon)
 	AWeapon* EquippedWeapon;
 
+	UPROPERTY(ReplicatedUsing = OnRep_SecondaryWeapon)
+	AWeapon* SecondaryWeapon;
+
 	UPROPERTY(Replicated)
 	bool bAiming;
 
 	UPROPERTY(EditAnywhere)
-	float BaseWalkSpeed = 600;
+	float BaseWalkSpeed = 600.f;
 
 	UPROPERTY(EditAnywhere)
-	float AimWalkSpeed = 450;
+	float AimWalkSpeed = 450.f;
 
 	UPROPERTY(EditAnywhere)
-	float CrouchWalkSpeed = 600;
+	float CrouchWalkSpeed = 600.f;
 
 	UPROPERTY(EditAnywhere)
-	float CrouchAimWalkSpeed = 600;
+	float CrouchAimWalkSpeed = 300.f;
 
 	bool bFireButtonPressed = false;
 
@@ -172,6 +185,9 @@ private:
 	TMap<EWeaponType, int32> CarriedAmmoMap;
 
 	UPROPERTY(EditAnywhere)
+	int32 MaxCarriedAmmo = 500;
+
+	UPROPERTY(EditAnywhere)
 	int32 StartingARAmmo = 30;
 
 	UPROPERTY(EditAnywhere)
@@ -216,4 +232,5 @@ private:
 
 public:
 	FORCEINLINE int32 GetGrenades() const { return Grenades; }
+	bool ShouldSwapWeapons();
 };

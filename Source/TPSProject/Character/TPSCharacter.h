@@ -51,6 +51,12 @@ public:
 	UFUNCTION(BlueprintImplementableEvent)
 	void UpdateSplineMesh();
 
+	void UpdateHUDHealth();
+	void UpdateHUDShield();
+	void UpdateHUDAmmo();
+
+	void SpawnDefaultWeapon();
+
 protected:
 	virtual void BeginPlay() override;
 	/*
@@ -110,9 +116,11 @@ protected:
 
 	void AimOffset(float DeltaTime);
 
+	void DropOrDestroyWeapon(AWeapon* Weapon);
+	void DropOrDestroyWeapons();
+
 	UFUNCTION()
 	void ReceiveDamage(AActor* DamagedActor, float Damage, const UDamageType* DamageType, class AController* InstigatorController, AActor* DamageCauser);
-	void UpdateHUDHealth();
 
 	void PollInit();
 	void RotateInPlace(float DeltaTime);
@@ -139,8 +147,11 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	class UCombatComponent* Combat;
 
+	UPROPERTY(VisibleAnywhere)
+	class UBuffComponent* Buff;
+
 	UFUNCTION(Server, Reliable)
-	void ServerEquipButtonPressed();
+		void ServerEquipButtonPressed();
 
 	float AO_Yaw;
 	float InterpAO_Yaw;
@@ -188,7 +199,16 @@ private:
 	float Health = 100.f;
 
 	UFUNCTION()
-	void OnRep_Health();
+	void OnRep_Health(float LastHealth);
+
+	UPROPERTY(EditAnywhere, Category = "Player Stats")
+	float MaxShield = 100.f;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Shield, EditAnywhere, Category = "Player Stats")
+	float Shield = 0.f;
+
+	UFUNCTION()
+	void OnRep_Shield(float LastShield);
 
 	UPROPERTY()
 	class ATPSController* TPSController;
@@ -232,7 +252,7 @@ private:
 	class ATPSPlayerState* TPSPlayerState;
 
 	UPROPERTY(VisibleAnywhere)
-	UStaticMeshComponent* AttachedGrenade;
+		UStaticMeshComponent* AttachedGrenade;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	class USplineComponent* GrenadeSpline;
@@ -242,6 +262,10 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, meta = (AllowPrivateAccess = "true"))
 	TArray<class USplineMeshComponent*> SplineMeshes;
+
+
+	UPROPERTY(EditAnywhere)
+	TSubclassOf<AWeapon> DefaultWeaponClass;
 
 public:
 	void SetOverlappingWeapon(AWeapon* Weapon);
@@ -256,7 +280,11 @@ public:
 	FORCEINLINE bool ShouldRotateRootBone() const { return bRotateRootBone; }
 	FORCEINLINE bool IsElimmed() const { return bElimmed; }
 	FORCEINLINE float GetHealth() const { return Health; }
+	FORCEINLINE void SetHealth(float Amount) { Health = Amount; }
 	FORCEINLINE float GetMaxHealth() const { return MaxHealth; }
+	FORCEINLINE float GetShield() const { return Shield; }
+	FORCEINLINE void SetShield(float Amount) { Shield = Amount; }
+	FORCEINLINE float GetMaxShield() const { return MaxShield; }
 	ECombatState GetCombatState() const;
 	FORCEINLINE ATPSController* GetController() const { return TPSController; }
 	FORCEINLINE UCombatComponent* GetCombat() const { return Combat; }
@@ -266,4 +294,5 @@ public:
 	FORCEINLINE USplineComponent* GetGrenadeSpline() const { return GrenadeSpline; }
 	FORCEINLINE UStaticMeshComponent* GetArcEndSphere() const { return ArcEndSphere; }
 	void ClearSplineMeshes();
+	FORCEINLINE UBuffComponent* GetBuff() const { return Buff; }
 };

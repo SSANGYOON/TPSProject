@@ -85,6 +85,8 @@ void ATPSController::OnPossess(APawn* InPawn)
 	if (TPSCharacter)
 	{
 		SetHUDHealth(TPSCharacter->GetHealth(), TPSCharacter->GetMaxHealth());
+		SetHUDShield(TPSCharacter->GetShield(), TPSCharacter->GetMaxShield());
+		TPSCharacter->UpdateHUDAmmo();
 	}
 }
 
@@ -103,9 +105,31 @@ void ATPSController::SetHUDHealth(float Health, float MaxHealth)
 	}
 	else
 	{
-		bInitializeCharacterOverlay = true;
+		bInitializeHealth = true;
 		HUDHealth = Health;
 		HUDMaxHealth = MaxHealth;
+	}
+}
+
+void ATPSController::SetHUDShield(float Shield, float MaxShield)
+{
+	TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
+	bool bHUDValid = TPSHUD &&
+		TPSHUD->CharacterOverlay &&
+		TPSHUD->CharacterOverlay->ShieldBar &&
+		TPSHUD->CharacterOverlay->ShieldText;
+	if (bHUDValid)
+	{
+		const float ShieldPercent = Shield / MaxShield;
+		TPSHUD->CharacterOverlay->ShieldBar->SetPercent(ShieldPercent);
+		FString ShieldText = FString::Printf(TEXT("%d/%d"), FMath::CeilToInt(Shield), FMath::CeilToInt(MaxShield));
+		TPSHUD->CharacterOverlay->ShieldText->SetText(FText::FromString(ShieldText));
+	}
+	else
+	{
+		bInitializeShield = true;
+		HUDShield = Shield;
+		HUDMaxShield = MaxShield;
 	}
 }
 
@@ -122,7 +146,7 @@ void ATPSController::SetHUDScore(float Score)
 	}
 	else
 	{
-		bInitializeCharacterOverlay = true;
+		bInitializeScore = true;
 		HUDScore = Score;
 	}
 }
@@ -140,7 +164,7 @@ void ATPSController::SetHUDDefeats(int32 Defeats)
 	}
 	else
 	{
-		bInitializeCharacterOverlay = true;
+		bInitializeDefeats = true;
 		HUDDefeats = Defeats;
 	}
 }
@@ -156,6 +180,11 @@ void ATPSController::SetHUDWeaponAmmo(int32 Ammo)
 		FString AmmoText = FString::Printf(TEXT("%d"), Ammo);
 		TPSHUD->CharacterOverlay->WeaponAmmoAmount->SetText(FText::FromString(AmmoText));
 	}
+	else
+	{
+		bInitializeWeaponAmmo = true;
+		HUDWeaponAmmo = Ammo;
+	}
 }
 
 void ATPSController::SetHUDCarriedAmmo(int32 Ammo)
@@ -168,6 +197,11 @@ void ATPSController::SetHUDCarriedAmmo(int32 Ammo)
 	{
 		FString AmmoText = FString::Printf(TEXT("%d"), Ammo);
 		TPSHUD->CharacterOverlay->CarriedAmmoAmount->SetText(FText::FromString(AmmoText));
+	}
+	else
+	{
+		bInitializeCarriedAmmo = true;
+		HUDCarriedAmmo = Ammo;
 	}
 }
 
@@ -228,6 +262,7 @@ void ATPSController::SetHUDGrenades(int32 Grenades)
 	}
 	else
 	{
+		bInitializeGrenades = true;
 		HUDGrenades = Grenades;
 	}
 }
@@ -264,9 +299,18 @@ void ATPSController::PollInit()
 			CharacterOverlay = TPSHUD->CharacterOverlay;
 			if (CharacterOverlay)
 			{
-				SetHUDHealth(HUDHealth, HUDMaxHealth);
-				SetHUDScore(HUDScore);
-				SetHUDDefeats(HUDDefeats);
+				if (bInitializeHealth) SetHUDHealth(HUDHealth, HUDMaxHealth);
+				if (bInitializeShield) SetHUDShield(HUDShield, HUDMaxShield);
+				if (bInitializeScore) SetHUDScore(HUDScore);
+				if (bInitializeDefeats) SetHUDDefeats(HUDDefeats);
+				if (bInitializeCarriedAmmo) SetHUDCarriedAmmo(HUDCarriedAmmo);
+				if (bInitializeWeaponAmmo) SetHUDWeaponAmmo(HUDWeaponAmmo);
+
+				ATPSCharacter* TPSCharacter = Cast<ATPSCharacter>(GetPawn());
+				if (TPSCharacter && TPSCharacter->GetCombat())
+				{
+					if (bInitializeGrenades) SetHUDGrenades(TPSCharacter->GetCombat()->GetGrenades());
+				}
 			}
 		}
 	}

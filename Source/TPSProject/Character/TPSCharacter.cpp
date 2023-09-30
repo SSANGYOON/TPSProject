@@ -19,6 +19,7 @@
 #include "Net/UnrealNetwork.h"
 #include "TPSProject/Weapon/Weapon.h"
 #include "TPSProject/TPSComponent/CombatComponent.h"
+#include "TPSProject/TPSComponent/BuffComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "TPSAnimInstance.h"
 #include "TPSProject/TPSProject.h"
@@ -53,6 +54,9 @@ ATPSCharacter::ATPSCharacter()
 	Combat = CreateDefaultSubobject<UCombatComponent>(TEXT("CombatComponent"));
 	Combat->SetIsReplicated(true);
 
+	Buff = CreateDefaultSubobject<UBuffComponent>(TEXT("BuffComponent"));
+	Buff->SetIsReplicated(true);
+
 	GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
 	GetMesh()->SetCollisionObjectType(ECC_SkeletalMesh);
@@ -77,6 +81,7 @@ void ATPSCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 	DOREPLIFETIME_CONDITION(ATPSCharacter, OverlappingWeapon, COND_OwnerOnly);
 	DOREPLIFETIME(ATPSCharacter, Health);
+	DOREPLIFETIME(ATPSCharacter, Shield);
 	DOREPLIFETIME(ATPSCharacter, bDisableGameplay);
 }
 
@@ -89,10 +94,7 @@ void ATPSCharacter::OnRep_ReplicatedMovement()
 
 void ATPSCharacter::Elim()
 {
-	if (Combat && Combat->EquippedWeapon)
-	{
-		Combat->EquippedWeapon->Dropped();
-	}
+	DropOrDestroyWeapons();
 	MulticastElim();
 	GetWorldTimerManager().SetTimer(
 		ElimTimer,
@@ -203,6 +205,34 @@ void ATPSCharacter::ElimTimerFinished()
 	}
 }
 
+void ATPSCharacter::DropOrDestroyWeapon(AWeapon* Weapon)
+{
+	if (Weapon == nullptr) return;
+	if (Weapon->bDestroyWeapon)
+	{
+		Weapon->Destroy();
+	}
+	else
+	{
+		Weapon->Dropped();
+	}
+}
+
+void ATPSCharacter::DropOrDestroyWeapons()
+{
+	if (Combat)
+	{
+		if (Combat->EquippedWeapon)
+		{
+			DropOrDestroyWeapon(Combat->EquippedWeapon);
+		}
+		if (Combat->SecondaryWeapon)
+		{
+			DropOrDestroyWeapon(Combat->SecondaryWeapon);
+		}
+	}
+}
+
 void ATPSCharacter::PlayFireMontage(bool bAiming)
 {
 	if (Combat == nullptr || Combat->EquippedWeapon == nullptr) return;
@@ -291,7 +321,10 @@ void ATPSCharacter::PlayThrowGrenadeMontage(const FName& SectionName)
 void ATPSCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	SpawnDefaultWeapon();
+	UpdateHUDAmmo();
 	UpdateHUDHealth();
+	UpdateHUDShield();
 	if (HasAuthority())
 	{
 		OnTakeAnyDamage.AddDynamic(this, &ATPSCharacter::ReceiveDamage);
@@ -384,6 +417,17 @@ void ATPSCharacter::PostInitializeComponents()
 	{
 		Combat->Character = this;
 	}
+	if (Buff)
+	{
+		Buff->Character = this;
+		Buff->SetInitialSpeeds(
+			Combat->BaseWalkSpeed,
+			Combat->AimWalkSpeed,
+			Combat->CrouchWalkSpeed,
+			Combat->CrouchAimWalkSpeed
+		);
+		Buff->SetInitialJumpVelocity(GetCharacterMovement()->JumpZVelocity);
+	}
 }
 
 void ATPSCharacter::Move(const FInputActionValue& value)
@@ -416,14 +460,7 @@ void ATPSCharacter::EquipButtonPressed()
 	if (bDisableGameplay) return;
 	if (Combat)
 	{
-		if (HasAuthority())
-		{
-			Combat->EquipWeapon(OverlappingWeapon);
-		}
-		else
-		{
-			ServerEquipButtonPressed();
-		}
+		ServerEquipButtonPressed();
 	}
 }
 
@@ -431,7 +468,14 @@ void ATPSCharacter::ServerEquipButtonPressed_Implementation()
 {
 	if (Combat)
 	{
-		Combat->EquipWeapon(OverlappingWeapon);
+		if (OverlappingWeapon)
+		{
+			Combat->EquipWeapon(OverlappingWeapon);
+		}
+		else if (Combat->ShouldSwapWeapons())
+		{
+			Combat->SwapWeapons();
+		}
 	}
 }
 
@@ -654,17 +698,45 @@ void ATPSCharacter::HideCameraIfCharacterClose()
 	}
 }
 
-void ATPSCharacter::OnRep_Health()
+void ATPSCharacter::OnRep_Health(float LastHealth)
 {
 	UpdateHUDHealth();
-	PlayHitReactMontage();
+	if (Health < LastHealth)
+	{
+		PlayHitReactMontage();
+	}
+}
+
+void ATPSCharacter::OnRep_Shield(float LastShield)
+{
+	UpdateHUDShield();
+	if (Shield < LastShield)
+	{
+		PlayHitReactMontage();
+	}
 }
 
 void ATPSCharacter::ReceiveDamage(AActor* DamagedActor, float Damage, const UDamageType* DamageType, AController* InstigatorController, AActor* DamageCauser)
 {
 	if (bElimmed) return;
-	Health = FMath::Clamp(Health - Damage, 0.f, MaxHealth);
+	float DamageToHealth = Damage;
+	if (Shield > 0.f)
+	{
+		if (Shield >= Damage)
+		{
+			DamageToHealth = 0.f;
+			Shield = FMath::Clamp(Shield - Damage, 0.f, MaxShield);
+		}
+		else
+		{
+			DamageToHealth = FMath::Clamp(DamageToHealth - Shield, 0.f, Damage);
+			Shield = 0.f;
+		}
+	}
+
+	Health = FMath::Clamp(Health - DamageToHealth, 0.f, MaxHealth);
 	UpdateHUDHealth();
+	UpdateHUDShield();
 	PlayHitReactMontage();
 
 	if (Health == 0.f)
@@ -685,6 +757,40 @@ void ATPSCharacter::UpdateHUDHealth()
 	if (TPSController)
 	{
 		TPSController->SetHUDHealth(Health, MaxHealth);
+	}
+}
+
+void ATPSCharacter::UpdateHUDShield()
+{
+	TPSController = TPSController == nullptr ? Cast<ATPSController>(Controller) : TPSController;
+	if (TPSController)
+	{
+		TPSController->SetHUDShield(Shield, MaxShield);
+	}
+}
+
+void ATPSCharacter::UpdateHUDAmmo()
+{
+	TPSController = TPSController == nullptr ? Cast<ATPSController>(Controller) : TPSController;
+	if (TPSController && Combat && Combat->EquippedWeapon)
+	{
+		TPSController->SetHUDCarriedAmmo(Combat->CarriedAmmo);
+		TPSController->SetHUDWeaponAmmo(Combat->EquippedWeapon->GetAmmo());
+	}
+}
+
+void ATPSCharacter::SpawnDefaultWeapon()
+{
+	ATPSGameMode* GameMode = Cast<ATPSGameMode>(UGameplayStatics::GetGameMode(this));
+	UWorld* World = GetWorld();
+	if (GameMode && World && !bElimmed && DefaultWeaponClass)
+	{
+		AWeapon* StartingWeapon = World->SpawnActor<AWeapon>(DefaultWeaponClass);
+		StartingWeapon->bDestroyWeapon = true;
+		if (Combat)
+		{
+			Combat->EquipWeapon(StartingWeapon);
+		}
 	}
 }
 
