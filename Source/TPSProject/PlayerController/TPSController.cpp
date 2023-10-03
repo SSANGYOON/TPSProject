@@ -15,6 +15,7 @@
 #include "TPSProject/TPSComponent/CombatComponent.h"
 #include "TPSProject/Weapon/Weapon.h"
 #include "TPSProject/GameState/TPSGameState.h"
+#include "Components/Image.h"
 
 void ATPSController::BeginPlay()
 {
@@ -38,6 +39,37 @@ void ATPSController::Tick(float DeltaTime)
 	SetHUDTime();
 	CheckTimeSync(DeltaTime);
 	PollInit();
+	CheckPing(DeltaTime);
+}
+
+void ATPSController::CheckPing(float DeltaTime)
+{
+	HighPingRunningTime += DeltaTime;
+	if (HighPingRunningTime > CheckPingFrequency)
+	{
+		PlayerState = PlayerState == nullptr ? GetPlayerState<APlayerState>() : PlayerState;
+		if (PlayerState)
+		{
+			if (PlayerState->GetPing() * 4 > HighPingThreshold) // ping is compressed; it's actually ping / 4
+			{
+				HighPingWarning();
+				PingAnimationRunningTime = 0.f;
+			}
+		}
+		HighPingRunningTime = 0.f;
+	}
+	bool bHighPingAnimationPlaying =
+		TPSHUD && TPSHUD->CharacterOverlay &&
+		TPSHUD->CharacterOverlay->HighPingAnimation &&
+		TPSHUD->CharacterOverlay->IsAnimationPlaying(TPSHUD->CharacterOverlay->HighPingAnimation);
+	if (bHighPingAnimationPlaying)
+	{
+		PingAnimationRunningTime += DeltaTime;
+		if (PingAnimationRunningTime > HighPingDuration)
+		{
+			StopHighPingWarning();
+		}
+	}
 }
 
 void ATPSController::CheckTimeSync(float DeltaTime)
@@ -47,6 +79,40 @@ void ATPSController::CheckTimeSync(float DeltaTime)
 	{
 		ServerRequestServerTime(GetWorld()->GetTimeSeconds());
 		TimeSyncRunningTime = 0.f;
+	}
+}
+
+void ATPSController::HighPingWarning()
+{
+	TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
+	bool bHUDValid = TPSHUD &&
+		TPSHUD->CharacterOverlay &&
+		TPSHUD->CharacterOverlay->HighPingImage &&
+		TPSHUD->CharacterOverlay->HighPingAnimation;
+	if (bHUDValid)
+	{
+		TPSHUD->CharacterOverlay->HighPingImage->SetOpacity(1.f);
+		TPSHUD->CharacterOverlay->PlayAnimation(
+			TPSHUD->CharacterOverlay->HighPingAnimation,
+			0.f,
+			5);
+	}
+}
+
+void ATPSController::StopHighPingWarning()
+{
+	TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
+	bool bHUDValid = TPSHUD &&
+		TPSHUD->CharacterOverlay &&
+		TPSHUD->CharacterOverlay->HighPingImage &&
+		TPSHUD->CharacterOverlay->HighPingAnimation;
+	if (bHUDValid)
+	{
+		TPSHUD->CharacterOverlay->HighPingImage->SetOpacity(0.f);
+		if (TPSHUD->CharacterOverlay->IsAnimationPlaying(TPSHUD->CharacterOverlay->HighPingAnimation))
+		{
+			TPSHUD->CharacterOverlay->StopAnimation(TPSHUD->CharacterOverlay->HighPingAnimation);
+		}
 	}
 }
 
