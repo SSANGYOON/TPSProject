@@ -4,11 +4,12 @@
 #include "HitScanWeapon.h"
 #include "Engine/SkeletalMeshSocket.h"
 #include "TPSProject/Character/TPSCharacter.h"
+#include "TPSProject/PlayerController/TPSController.h"
 #include "Kismet/GameplayStatics.h"
 #include "particles/ParticleSystemComponent.h"
 #include "Sound/SoundCue.h"
-#include "Kismet/KismetMathLibrary.h"
 #include "WeaponTypes.h"
+#include "TPSProject/TPSComponent/LagCompensationComponent.h"
 #include "DrawDebugHelpers.h"
 
 void AHitScanWeapon::Fire(const FVector& HitTarget)
@@ -29,15 +30,33 @@ void AHitScanWeapon::Fire(const FVector& HitTarget)
 		WeaponTraceHit(Start, HitTarget, FireHit);
 
 		ATPSCharacter* TPSCharacter = Cast<ATPSCharacter>(FireHit.GetActor());
-		if (TPSCharacter && HasAuthority() && InstigatorController)
+		if (TPSCharacter && InstigatorController)
 		{
-			UGameplayStatics::ApplyDamage(
-				TPSCharacter,
-				Damage,
-				InstigatorController,
-				this,
-				UDamageType::StaticClass()
-			);
+			if (HasAuthority() && !bUseServerSideRewind)
+			{
+				UGameplayStatics::ApplyDamage(
+					TPSCharacter,
+					Damage,
+					InstigatorController,
+					this,
+					UDamageType::StaticClass()
+				);
+			}
+			if (!HasAuthority() && bUseServerSideRewind)
+			{
+				TPSOwnerCharacter = TPSOwnerCharacter == nullptr ? Cast<ATPSCharacter>(OwnerPawn) : TPSOwnerCharacter;
+				TPSOwnerController = TPSOwnerController == nullptr ? Cast<ATPSController>(InstigatorController) : TPSOwnerController;
+				if (TPSOwnerController && TPSOwnerCharacter && TPSOwnerCharacter->GetLagCompensation() && TPSOwnerCharacter->IsLocallyControlled())
+				{
+					TPSOwnerCharacter->GetLagCompensation()->ServerScoreRequest(
+						TPSCharacter,
+						Start,
+						HitTarget,
+						TPSOwnerController->GetServerTime() - TPSOwnerController->SingleTripTime,
+						this
+					);
+				}
+			}
 		}
 		if (ImpactParticles)
 		{
@@ -81,7 +100,7 @@ void AHitScanWeapon::WeaponTraceHit(const FVector& TraceStart, const FVector& Hi
 	UWorld* World = GetWorld();
 	if (World)
 	{
-		FVector End = bUseScatter ? TraceEndWithScatter(TraceStart, HitTarget) : TraceStart + (HitTarget - TraceStart) * 1.25f;
+		FVector End = TraceStart + (HitTarget - TraceStart) * 1.25f;
 
 		World->LineTraceSingleByChannel(
 			OutHit,
@@ -94,6 +113,7 @@ void AHitScanWeapon::WeaponTraceHit(const FVector& TraceStart, const FVector& Hi
 		{
 			BeamEnd = OutHit.ImpactPoint;
 		}
+		DrawDebugSphere(GetWorld(), BeamEnd, 16.f, 12, FColor::Orange, true);
 		if (BeamParticles)
 		{
 			UParticleSystemComponent* Beam = UGameplayStatics::SpawnEmitterAtLocation(
@@ -110,28 +130,3 @@ void AHitScanWeapon::WeaponTraceHit(const FVector& TraceStart, const FVector& Hi
 		}
 	}
 }
-
-
-FVector AHitScanWeapon::TraceEndWithScatter(const FVector& TraceStart, const FVector& HitTarget)
-{
-	//Random Scatter가 없을 때 탄의 진행 방향
-	FVector ToTargetNormalized = (HitTarget - TraceStart).GetSafeNormal();
-	//Random Scatter가 없을 때 탄의 도착 위치
-	FVector SphereCenter = TraceStart + ToTargetNormalized * DistanceToSphere;
-	//Random Scatter Vector
-	FVector RandVec = UKismetMathLibrary::RandomUnitVector() * FMath::FRandRange(0.f, SphereRadius);
-	FVector EndLoc = SphereCenter + RandVec;
-	FVector ToEndLoc = EndLoc - TraceStart;
-
-	/*DrawDebugSphere(GetWorld(), SphereCenter, SphereRadius, 12, FColor::Red, true);
-	DrawDebugSphere(GetWorld(), EndLoc, 4.f, 12, FColor::Orange, true);
-	DrawDebugLine(
-		GetWorld(),
-		TraceStart,
-		FVector(TraceStart + ToEndLoc * TRACE_LENGTH / ToEndLoc.Size()),
-		FColor::Cyan,
-		true);*/
-
-	return FVector(TraceStart + ToEndLoc * TRACE_LENGTH / ToEndLoc.Size());
-}
-

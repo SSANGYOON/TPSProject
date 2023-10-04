@@ -391,7 +391,8 @@ void ATPSController::ServerRequestServerTime_Implementation(float TimeOfClientRe
 void ATPSController::ClientReportServerTime_Implementation(float TimeOfClientRequest, float TimeServerReceivedClientRequest)
 {
 	float RoundTripTime = GetWorld()->GetTimeSeconds() - TimeOfClientRequest;
-	float CurrentServerTime = TimeServerReceivedClientRequest + (0.5f * RoundTripTime); // 서버에 RPC가 도착한 시점이 서버시간 요청후 + 0.5 * RoundTripTime으로 가정
+	SingleTripTime = 0.5f * RoundTripTime;
+	float CurrentServerTime = TimeServerReceivedClientRequest + SingleTripTime;
 	ClientServerDelta = CurrentServerTime - GetWorld()->GetTimeSeconds();
 }
 
