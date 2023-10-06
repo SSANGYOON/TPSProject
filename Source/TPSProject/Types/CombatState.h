@@ -8,6 +8,7 @@ enum class ECombatState : uint8
 	ECS_GrenadeStart UMETA(DisplayName = "GrenadeStart"),
 	ECS_GrenadeAim UMETA(DisplayName = "GrenadeStart"),
 	ECS_ThrowingGrenade UMETA(DisplayName = "Throwing Grenade"),
+	ECS_SwappingWeapons UMETA(DisplayName = "Swapping Weapons"),
 
 	ECS_MAX UMETA(DisplayName = "DefaultMAX")
 };

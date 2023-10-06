@@ -13,7 +13,6 @@
 #include "TPSProject/HUD/Announcement.h"
 #include "Kismet/GameplayStatics.h"
 #include "TPSProject/TPSComponent/CombatComponent.h"
-#include "TPSProject/Weapon/Weapon.h"
 #include "TPSProject/GameState/TPSGameState.h"
 #include "Components/Image.h"
 
@@ -44,6 +43,7 @@ void ATPSController::Tick(float DeltaTime)
 
 void ATPSController::CheckPing(float DeltaTime)
 {
+	if (HasAuthority()) return;
 	HighPingRunningTime += DeltaTime;
 	if (HighPingRunningTime > CheckPingFrequency)
 	{
@@ -54,6 +54,12 @@ void ATPSController::CheckPing(float DeltaTime)
 			{
 				HighPingWarning();
 				PingAnimationRunningTime = 0.f;
+
+				ServerReportPingStatus(true);
+			}
+			else
+			{
+				ServerReportPingStatus(false);
 			}
 		}
 		HighPingRunningTime = 0.f;
@@ -70,6 +76,11 @@ void ATPSController::CheckPing(float DeltaTime)
 			StopHighPingWarning();
 		}
 	}
+}
+
+void ATPSController::ServerReportPingStatus_Implementation(bool bHighPing)
+{
+	HighPingDelegate.Broadcast(bHighPing);
 }
 
 void ATPSController::CheckTimeSync(float DeltaTime)
