@@ -211,7 +211,7 @@ void AWeapon::OnEquipped()
 	EnableCustomDepth(false);
 
 	TPSOwnerCharacter = TPSOwnerCharacter == nullptr ? Cast<ATPSCharacter>(GetOwner()) : TPSOwnerCharacter;
-	if (TPSOwnerCharacter)
+	if (TPSOwnerCharacter && bUseServerSideRewind)
 	{
 		TPSOwnerController = TPSOwnerController == nullptr ? Cast<ATPSController>(TPSOwnerCharacter->Controller) : TPSOwnerController;
 		if (TPSOwnerController && HasAuthority() && !TPSOwnerController->HighPingDelegate.IsBound())

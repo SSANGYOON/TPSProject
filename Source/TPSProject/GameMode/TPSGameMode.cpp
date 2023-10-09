@@ -20,6 +20,18 @@ ATPSGameMode::ATPSGameMode()
 	bDelayedStart = true;
 }
 
+void ATPSGameMode::SendChat(const FString& Text, const FString& PlayerName)
+{
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		ATPSController* TPSPlayerController = Cast<ATPSController>(*It);
+		if (TPSPlayerController)
+		{
+			TPSPlayerController->ClientSetText(Text, PlayerName);
+		}
+	}
+}
+
 void ATPSGameMode::BeginPlay()
 {
 	Super::BeginPlay();
@@ -67,7 +79,7 @@ void ATPSGameMode::OnMatchStateSet()
 		ATPSController* TPSController = Cast<ATPSController>(*It);
 		if (TPSController)
 		{
-			TPSController->OnMatchStateSet(MatchState);
+			TPSController->OnMatchStateSet(MatchState, bTeamsMatch);
 		}
 	}
 }
@@ -83,8 +95,33 @@ void ATPSGameMode::PlayerEliminated(ATPSCharacter* ElimmedCharacter, ATPSControl
 
 	if (AttackerPlayerState && AttackerPlayerState != VictimPlayerState && TPSGameState)
 	{
+		TArray<ATPSPlayerState*> PlayersCurrentlyInTheLead;
+		for (auto LeadPlayer : TPSGameState->TopScoringPlayers)
+		{
+			PlayersCurrentlyInTheLead.Add(LeadPlayer);
+		}
 		AttackerPlayerState->AddToScore(1.f);
 		TPSGameState->UpdateTopScore(AttackerPlayerState);
+		if (TPSGameState->TopScoringPlayers.Contains(AttackerPlayerState))
+		{
+			ATPSCharacter* Leader = Cast<ATPSCharacter>(AttackerPlayerState->GetPawn());
+			if (Leader)
+			{
+				Leader->MulticastGainedTheLead();
+			}
+		}
+
+		for (int32 i = 0; i < PlayersCurrentlyInTheLead.Num(); i++)
+		{
+			if (!TPSGameState->TopScoringPlayers.Contains(PlayersCurrentlyInTheLead[i]))
+			{
+				ATPSCharacter* Loser = Cast<ATPSCharacter>(PlayersCurrentlyInTheLead[i]->GetPawn());
+				if (Loser)
+				{
+					Loser->MulticastLostTheLead();
+				}
+			}
+		}
 	}
 	if (VictimPlayerState)
 	{
@@ -92,7 +129,16 @@ void ATPSGameMode::PlayerEliminated(ATPSCharacter* ElimmedCharacter, ATPSControl
 	}
 	if (ElimmedCharacter)
 	{
-		ElimmedCharacter->Elim();
+		ElimmedCharacter->Elim(false);
+	}
+
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		ATPSController* TPSPlayer = Cast<ATPSController>(*It);
+		if (TPSPlayer && AttackerPlayerState && VictimPlayerState)
+		{
+			TPSPlayer->BroadcastElim(AttackerPlayerState, VictimPlayerState);
+		}
 	}
 }
 
@@ -110,4 +156,24 @@ void ATPSGameMode::RequestRespawn(ACharacter* ElimmedCharacter, AController* Eli
 		int32 Selection = FMath::RandRange(0, PlayerStarts.Num() - 1);
 		RestartPlayerAtPlayerStart(ElimmedController, PlayerStarts[Selection]);
 	}
+}
+
+void ATPSGameMode::PlayerLeftGame(ATPSPlayerState* PlayerLeaving)
+{
+	if (PlayerLeaving == nullptr) return;
+	ATPSGameState* TPSGameState = GetGameState<ATPSGameState>();
+	if (TPSGameState && TPSGameState->TopScoringPlayers.Contains(PlayerLeaving))
+	{
+		TPSGameState->TopScoringPlayers.Remove(PlayerLeaving);
+	}
+	ATPSCharacter* CharacterLeaving = Cast<ATPSCharacter>(PlayerLeaving->GetPawn());
+	if (CharacterLeaving)
+	{
+		CharacterLeaving->Elim(true);
+	}
+}
+
+float ATPSGameMode::CalculateDamage(AController* Attacker, AController* Victim, float BaseDamage)
+{
+	return BaseDamage;
 }

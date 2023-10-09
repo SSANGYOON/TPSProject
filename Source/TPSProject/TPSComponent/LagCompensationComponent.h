@@ -75,7 +75,7 @@ public:
 	FServerSideRewindResult ProjectileServerSideRewind(ATPSCharacter* HitCharacter, const FVector_NetQuantize& TraceStart, const FVector_NetQuantize100& InitialVelocity, float HitTime);
 	FShotgunServerSideRewindResult ShotgunServerSideRewind(const TArray<ATPSCharacter*>& HitCharacters, const FVector_NetQuantize& TraceStart, const TArray<FVector_NetQuantize>& HitLocations, float HitTime);
 	UFUNCTION(Server, Reliable)
-	void ServerScoreRequest(ATPSCharacter* HitCharacter, const FVector_NetQuantize& TraceStart, const FVector_NetQuantize& HitLocation, float HitTime, class AWeapon* DamageCauser);
+	void ServerScoreRequest(ATPSCharacter* HitCharacter, const FVector_NetQuantize& TraceStart, const FVector_NetQuantize& HitLocation, float HitTime);
 	UFUNCTION(Server, Reliable)
 	void ShotgunServerScoreRequest(const TArray<ATPSCharacter*>& HitCharacters, const FVector_NetQuantize& TraceStart, const TArray<FVector_NetQuantize>& HitLocations, float HitTime);
 	UFUNCTION(Server, Reliable)

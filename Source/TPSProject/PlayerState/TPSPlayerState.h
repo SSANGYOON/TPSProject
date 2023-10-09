@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
+#include "TPSProject/Types/Team.h"
 #include "TPSPlayerState.generated.h"
 
 /**
@@ -35,5 +36,14 @@ private:
 
 	UPROPERTY(ReplicatedUsing = OnRep_Defeats)
 	int32 Defeats;
-	
+
+	UPROPERTY(ReplicatedUsing = OnRep_Team)
+	ETeam Team = ETeam::ET_NoTeam;
+
+	UFUNCTION()
+	void OnRep_Team();
+
+public:
+	FORCEINLINE ETeam GetTeam() const { return Team; }
+	void SetTeam(ETeam TeamToSet);
 };

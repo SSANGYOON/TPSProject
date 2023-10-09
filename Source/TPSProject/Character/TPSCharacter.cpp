@@ -33,6 +33,9 @@
 #include "Components/SplineMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "TPSProject/TPSComponent/LagCompensationComponent.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "TPSProject/GameState/TPSGameState.h"
 
 ATPSCharacter::ATPSCharacter()
 {
@@ -175,16 +178,10 @@ void ATPSCharacter::OnRep_ReplicatedMovement()
 	TimeSinceLastMovementReplication = 0.f;
 }
 
-void ATPSCharacter::Elim()
+void ATPSCharacter::Elim(bool bPlayerLeftGame)
 {
 	DropOrDestroyWeapons();
-	MulticastElim();
-	GetWorldTimerManager().SetTimer(
-		ElimTimer,
-		this,
-		&ATPSCharacter::ElimTimerFinished,
-		ElimDelay
-	);
+	MulticastElim(bPlayerLeftGame);
 }
 
 void ATPSCharacter::Destroyed()
@@ -201,8 +198,31 @@ void ATPSCharacter::Destroyed()
 	}
 }
 
-void ATPSCharacter::MulticastElim_Implementation()
+void ATPSCharacter::MulticastGainedTheLead_Implementation()
 {
+	if (CrownSystem == nullptr) return;
+	if (CrownComponent == nullptr)
+	{
+		CrownComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(CrownSystem, GetMesh(), FName(),
+			GetActorLocation() + FVector(0.f, 0.f, 110.f), GetActorRotation(), EAttachLocation::KeepWorldPosition, false);
+	}
+	if (CrownComponent)
+	{
+		CrownComponent->Activate();
+	}
+}
+
+void ATPSCharacter::MulticastLostTheLead_Implementation()
+{
+	if (CrownComponent)
+	{
+		CrownComponent->DestroyComponent();
+	}
+}
+
+void ATPSCharacter::MulticastElim_Implementation(bool bPlayerLeftGame)
+{
+	bLeftGame = bPlayerLeftGame;
 	if (TPSController)
 	{
 		TPSController->SetHUDWeaponAmmo(0);
@@ -230,6 +250,7 @@ void ATPSCharacter::MulticastElim_Implementation()
 
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	AttachedGrenade->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	// Spawn Reaper
 	if (ReaperEffect)
@@ -259,6 +280,16 @@ void ATPSCharacter::MulticastElim_Implementation()
 	{
 		ShowSniperScopeWidget(false);
 	}
+	if (CrownComponent)
+	{
+		CrownComponent->DestroyComponent();
+	}
+	GetWorldTimerManager().SetTimer(
+		ElimTimer,
+		this,
+		&ATPSCharacter::ElimTimerFinished,
+		ElimDelay
+	);
 }
 
 void ATPSCharacter::UpdateDissolveMaterial(float DissolveVaule)
@@ -281,10 +312,24 @@ void ATPSCharacter::StartDissolve()
 
 void ATPSCharacter::ElimTimerFinished()
 {
-	ATPSGameMode* TPSGameMode = GetWorld()->GetAuthGameMode<ATPSGameMode>();
-	if (TPSGameMode)
+	TPSGameMode = TPSGameMode == nullptr ? GetWorld()->GetAuthGameMode<ATPSGameMode>() : TPSGameMode;
+	if (TPSGameMode && !bLeftGame)
 	{
 		TPSGameMode->RequestRespawn(this, Controller);
+	}
+	if (bLeftGame && IsLocallyControlled())
+	{
+		OnLeftGame.Broadcast();
+	}
+}
+
+void ATPSCharacter::ServerLeaveGame_Implementation()
+{
+	TPSGameMode = TPSGameMode == nullptr ? GetWorld()->GetAuthGameMode<ATPSGameMode>() : TPSGameMode;
+	TPSPlayerState = TPSPlayerState == nullptr ? GetPlayerState<ATPSPlayerState>() : TPSPlayerState;
+	if (TPSGameMode && TPSPlayerState)
+	{
+		TPSGameMode->PlayerLeftGame(TPSPlayerState);
 	}
 }
 
@@ -407,6 +452,25 @@ void ATPSCharacter::PlaySwapMontage()
 	if (AnimInstance && SwapMontage)
 	{
 		AnimInstance->Montage_Play(SwapMontage);
+	}
+}
+
+void ATPSCharacter::SetTeamColor(ETeam Team)
+{
+	if (GetMesh() == nullptr || OriginalMaterial == nullptr) return;
+	switch (Team)
+	{
+	case ETeam::ET_NoTeam:
+		GetMesh()->SetMaterial(0, OriginalMaterial);
+		break;
+	case ETeam::ET_BlueTeam:
+		GetMesh()->SetMaterial(0, BlueMaterial);
+		DissolveMaterialInstance = BlueDissolveMatInst;
+		break;
+	case ETeam::ET_RedTeam:
+		GetMesh()->SetMaterial(0, RedMaterial);
+		DissolveMaterialInstance = RedDissolveMatInst;
+		break;
 	}
 }
 
@@ -798,6 +862,10 @@ void ATPSCharacter::HideCameraIfCharacterClose()
 		{
 			Combat->EquippedWeapon->GetWeaponMesh()->bOwnerNoSee = true;
 		}
+		if (Combat && Combat->SecondaryWeapon && Combat->SecondaryWeapon->GetWeaponMesh())
+		{
+			Combat->SecondaryWeapon->GetWeaponMesh()->bOwnerNoSee = true;
+		}
 	}
 	else
 	{
@@ -805,6 +873,10 @@ void ATPSCharacter::HideCameraIfCharacterClose()
 		if (Combat && Combat->EquippedWeapon && Combat->EquippedWeapon->GetWeaponMesh())
 		{
 			Combat->EquippedWeapon->GetWeaponMesh()->bOwnerNoSee = false;
+		}
+		if (Combat && Combat->SecondaryWeapon && Combat->SecondaryWeapon->GetWeaponMesh())
+		{
+			Combat->SecondaryWeapon->GetWeaponMesh()->bOwnerNoSee = false;
 		}
 	}
 }
@@ -829,7 +901,10 @@ void ATPSCharacter::OnRep_Shield(float LastShield)
 
 void ATPSCharacter::ReceiveDamage(AActor* DamagedActor, float Damage, const UDamageType* DamageType, AController* InstigatorController, AActor* DamageCauser)
 {
-	if (bElimmed) return;
+	TPSGameMode = TPSGameMode == nullptr ? GetWorld()->GetAuthGameMode<ATPSGameMode>() : TPSGameMode;
+	if (bElimmed || TPSGameMode == nullptr) return;
+	Damage = TPSGameMode->CalculateDamage(InstigatorController, Controller, Damage);
+
 	float DamageToHealth = Damage;
 	if (Shield > 0.f)
 	{
@@ -852,7 +927,6 @@ void ATPSCharacter::ReceiveDamage(AActor* DamagedActor, float Damage, const UDam
 
 	if (Health == 0.f)
 	{
-		ATPSGameMode* TPSGameMode = GetWorld()->GetAuthGameMode<ATPSGameMode>();
 		if (TPSGameMode)
 		{
 			TPSController = TPSController == nullptr ? Cast<ATPSController>(Controller) : TPSController;
@@ -892,9 +966,9 @@ void ATPSCharacter::UpdateHUDAmmo()
 
 void ATPSCharacter::SpawnDefaultWeapon()
 {
-	ATPSGameMode* GameMode = Cast<ATPSGameMode>(UGameplayStatics::GetGameMode(this));
+	TPSGameMode = TPSGameMode == nullptr ? GetWorld()->GetAuthGameMode<ATPSGameMode>() : TPSGameMode;
 	UWorld* World = GetWorld();
-	if (GameMode && World && !bElimmed && DefaultWeaponClass)
+	if (TPSGameMode && World && !bElimmed && DefaultWeaponClass)
 	{
 		AWeapon* StartingWeapon = World->SpawnActor<AWeapon>(DefaultWeaponClass);
 		StartingWeapon->bDestroyWeapon = true;
@@ -914,6 +988,12 @@ void ATPSCharacter::PollInit()
 		{
 			TPSPlayerState->AddToScore(0.f);
 			TPSPlayerState->AddToDefeats(0);
+			SetTeamColor(TPSPlayerState->GetTeam());
+			ATPSGameState* TPSGameState = Cast<ATPSGameState>(UGameplayStatics::GetGameState(this));
+			if (TPSGameState && TPSGameState->TopScoringPlayers.Contains(TPSPlayerState))
+			{
+				MulticastGainedTheLead();
+			}
 		}
 	}
 }

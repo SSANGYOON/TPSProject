@@ -15,6 +15,12 @@
 #include "TPSProject/TPSComponent/CombatComponent.h"
 #include "TPSProject/GameState/TPSGameState.h"
 #include "Components/Image.h"
+#include "TPSProject/HUD/ReturnToMainMenu.h"
+#include "TPSProject/Types/Announcement.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "TPSProject/HUD/ChatOverlay.h"
+#include "Components/EditableText.h"
 
 void ATPSController::BeginPlay()
 {
@@ -22,6 +28,94 @@ void ATPSController::BeginPlay()
 
 	TPSHUD = Cast<ATPSHUD>(GetHUD());
 	ServerCheckMatchState();
+
+	AddChat();
+}
+
+void ATPSController::AddChat()
+{
+	if (!IsLocalPlayerController()) return;
+	if (ChatOverlayClass)
+	{
+		ChatWidget = ChatWidget == nullptr ? CreateWidget<UChatOverlay>(this, ChatOverlayClass) : ChatWidget;
+		if (ChatWidget)
+		{
+			ChatWidget->AddToViewport();
+			ChatWidget->InputTextBox->SetVisibility(ESlateVisibility::Collapsed);
+			ChatWidget->InputTextBox->OnTextCommitted.AddDynamic(this, &ATPSController::OnTextCommitted);
+		}
+	}
+}
+
+void ATPSController::EnterKeyPressed()
+{
+	if (ChatWidget && ChatWidget->InputTextBox)
+	{
+		if (ChatWidget->InputTextBox->GetVisibility() == ESlateVisibility::Collapsed)
+		{
+			ChatWidget->InputTextBox->SetVisibility(ESlateVisibility::Visible);
+			FInputModeGameAndUI InputMode;
+			InputMode.SetWidgetToFocus(ChatWidget->InputTextBox->TakeWidget());
+			SetInputMode(InputMode);
+			SetShowMouseCursor(true);
+		}
+		else
+		{
+			ChatWidget->InputTextBox->SetVisibility(ESlateVisibility::Collapsed);
+			FInputModeGameOnly InputMode;
+			SetInputMode(InputMode);
+			SetShowMouseCursor(false);
+		}
+	}
+}
+
+void ATPSController::OnTextCommitted(const FText& Text, ETextCommit::Type CommitMethod)
+{
+	if (CommitMethod != ETextCommit::OnEnter) return;
+
+	PlayerState = PlayerState == nullptr ? GetPlayerState<APlayerState>() : PlayerState;
+	FString PlayerName("");
+	if (PlayerState)
+	{
+		PlayerName = PlayerState->GetPlayerName();
+	}
+	if (ChatWidget)
+	{
+		if (!Text.IsEmpty())
+		{
+			ServerSetText(Text.ToString(), PlayerName);
+		}
+		ChatWidget->InputTextBox->SetText(FText());
+		ChatWidget->InputTextBox->SetVisibility(ESlateVisibility::Collapsed);
+		FInputModeGameOnly InputMode;
+		SetInputMode(InputMode);
+		SetShowMouseCursor(false);
+	}
+}
+
+void ATPSController::ServerSetText_Implementation(const FString& Text, const FString& PlayerName)
+{
+	TPSGameMode = TPSGameMode == nullptr? Cast<ATPSGameMode>(UGameplayStatics::GetGameMode(this)) : TPSGameMode;
+	if (TPSGameMode)
+	{
+		TPSGameMode->SendChat(Text, PlayerName);
+	}
+}
+
+void ATPSController::ClientSetText_Implementation(const FString& Text, const FString& PlayerName)
+{
+	PlayerState = PlayerState == nullptr ? GetPlayerState<APlayerState>() : PlayerState;
+	if (ChatWidget && PlayerState)
+	{
+		if (PlayerName == PlayerState->GetPlayerName())
+		{
+			ChatWidget->SetChatText(Text, "You");
+		}
+		else
+		{
+			ChatWidget->SetChatText(Text, PlayerName);
+		}
+	}
 }
 
 void ATPSController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -29,6 +123,67 @@ void ATPSController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ATPSController, MatchState);
+	DOREPLIFETIME(ATPSController, bShowTeamScores);
+}
+
+void ATPSController::HideTeamScores()
+{
+	TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
+	bool bHUDValid = TPSHUD &&
+		TPSHUD->CharacterOverlay &&
+		TPSHUD->CharacterOverlay->RedTeamScore &&
+		TPSHUD->CharacterOverlay->BlueTeamScore &&
+		TPSHUD->CharacterOverlay->ScoreSpacerText;
+	if (bHUDValid)
+	{
+		TPSHUD->CharacterOverlay->RedTeamScore->SetText(FText());
+		TPSHUD->CharacterOverlay->BlueTeamScore->SetText(FText());
+		TPSHUD->CharacterOverlay->ScoreSpacerText->SetText(FText());
+	}
+}
+
+void ATPSController::InitTeamScores()
+{
+	TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
+	bool bHUDValid = TPSHUD &&
+		TPSHUD->CharacterOverlay &&
+		TPSHUD->CharacterOverlay->RedTeamScore &&
+		TPSHUD->CharacterOverlay->BlueTeamScore &&
+		TPSHUD->CharacterOverlay->ScoreSpacerText;
+	if (bHUDValid)
+	{
+		FString Zero("0");
+		FString Spacer("|");
+		TPSHUD->CharacterOverlay->RedTeamScore->SetText(FText::FromString(Zero));
+		TPSHUD->CharacterOverlay->BlueTeamScore->SetText(FText::FromString(Zero));
+		TPSHUD->CharacterOverlay->ScoreSpacerText->SetText(FText::FromString(Spacer));
+	}
+}
+
+void ATPSController::SetHUDRedTeamScore(int32 RedScore)
+{
+	TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
+	bool bHUDValid = TPSHUD &&
+		TPSHUD->CharacterOverlay &&
+		TPSHUD->CharacterOverlay->RedTeamScore;
+	if (bHUDValid)
+	{
+		FString ScoreText = FString::Printf(TEXT("%d"), RedScore);
+		TPSHUD->CharacterOverlay->RedTeamScore->SetText(FText::FromString(ScoreText));
+	}
+}
+
+void ATPSController::SetHUDBlueTeamScore(int32 BlueScore)
+{
+	TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
+	bool bHUDValid = TPSHUD &&
+		TPSHUD->CharacterOverlay &&
+		TPSHUD->CharacterOverlay->BlueTeamScore;
+	if (bHUDValid)
+	{
+		FString ScoreText = FString::Printf(TEXT("%d"), BlueScore);
+		TPSHUD->CharacterOverlay->BlueTeamScore->SetText(FText::FromString(ScoreText));
+	}
 }
 
 void ATPSController::Tick(float DeltaTime)
@@ -76,6 +231,107 @@ void ATPSController::CheckPing(float DeltaTime)
 			StopHighPingWarning();
 		}
 	}
+}
+
+void ATPSController::ShowReturnToMainMenu()
+{
+	if (ReturnToMainMenuWidget == nullptr) return;
+	if (ReturnToMainMenu == nullptr)
+	{
+		ReturnToMainMenu = CreateWidget<UReturnToMainMenu>(this, ReturnToMainMenuWidget);
+	}
+	if (ReturnToMainMenu)
+	{
+		bReturnToMainMenuOpen = !bReturnToMainMenuOpen;
+		if (bReturnToMainMenuOpen)
+		{
+			ReturnToMainMenu->MenuSetup();
+		}
+		else
+		{
+			ReturnToMainMenu->MenuTearDown();
+		}
+	}
+}
+
+void ATPSController::OnRep_ShowTeamScores()
+{
+	if (bShowTeamScores)
+	{
+		InitTeamScores();
+	}
+	else
+	{
+		HideTeamScores();
+	}
+}
+
+FString ATPSController::GetInfoText(const TArray<class ATPSPlayerState*>& Players)
+{
+	ATPSPlayerState* TPSPlayerState = GetPlayerState<ATPSPlayerState>();
+	if (TPSPlayerState == nullptr) return FString();
+	FString InfoTextString;
+	if (Players.Num() == 0)
+	{
+		InfoTextString = Announcement::ThereIsNoWinner;
+	}
+	else if (Players.Num() == 1 && Players[0] == TPSPlayerState)
+	{
+		InfoTextString = Announcement::YouAreTheWinner;
+	}
+	else if (Players.Num() == 1)
+	{
+		InfoTextString = FString::Printf(TEXT("Winner: \n%s"), *Players[0]->GetPlayerName());
+	}
+	else if (Players.Num() > 1)
+	{
+		InfoTextString = Announcement::PlayersTiedForTheWin;
+		InfoTextString.Append(FString("\n"));
+		for (auto TiedPlayer : Players)
+		{
+			InfoTextString.Append(FString::Printf(TEXT("%s\n"), *TiedPlayer->GetPlayerName()));
+		}
+	}
+
+	return InfoTextString;
+}
+
+FString ATPSController::GetTeamsInfoText(ATPSGameState* TPSGameState)
+{
+	if (TPSGameState == nullptr) return FString();
+	FString InfoTextString;
+
+	const int32 RedTeamScore = TPSGameState->RedTeamScore;
+	const int32 BlueTeamScore = TPSGameState->BlueTeamScore;
+
+	if (RedTeamScore == 0 && BlueTeamScore == 0)
+	{
+		InfoTextString = Announcement::ThereIsNoWinner;
+	}
+	else if (RedTeamScore == BlueTeamScore)
+	{
+		InfoTextString = FString::Printf(TEXT("%s\n"), *Announcement::TeamsTiedForTheWin);
+		InfoTextString.Append(Announcement::RedTeam);
+		InfoTextString.Append(TEXT("\n"));
+		InfoTextString.Append(Announcement::BlueTeam);
+		InfoTextString.Append(TEXT("\n"));
+	}
+	else if (RedTeamScore > BlueTeamScore)
+	{
+		InfoTextString = Announcement::RedTeamWins;
+		InfoTextString.Append(TEXT("\n"));
+		InfoTextString.Append(FString::Printf(TEXT("%s: %d\n"), *Announcement::RedTeam, RedTeamScore));
+		InfoTextString.Append(FString::Printf(TEXT("%s: %d\n"), *Announcement::BlueTeam, BlueTeamScore));
+	}
+	else if (BlueTeamScore > RedTeamScore)
+	{
+		InfoTextString = Announcement::BlueTeamWins;
+		InfoTextString.Append(TEXT("\n"));
+		InfoTextString.Append(FString::Printf(TEXT("%s: %d\n"), *Announcement::BlueTeam, BlueTeamScore));
+		InfoTextString.Append(FString::Printf(TEXT("%s: %d\n"), *Announcement::RedTeam, RedTeamScore));
+	}
+
+	return InfoTextString;
 }
 
 void ATPSController::ServerReportPingStatus_Implementation(bool bHighPing)
@@ -393,6 +649,18 @@ void ATPSController::PollInit()
 	}
 }
 
+void ATPSController::SetupInputComponent()
+{
+	Super::SetupInputComponent();
+
+	if (InputComponent == nullptr) return;
+	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent))
+	{
+		EnhancedInputComponent->BindAction(QuitAction, ETriggerEvent::Completed, this, &ATPSController::ShowReturnToMainMenu);
+		EnhancedInputComponent->BindAction(EnterKeyAction, ETriggerEvent::Triggered, this, &ATPSController::EnterKeyPressed);
+	}
+}
+
 void ATPSController::ServerRequestServerTime_Implementation(float TimeOfClientRequest)
 {
 	float ServerTimeOfReceipt = GetWorld()->GetTimeSeconds();
@@ -422,13 +690,13 @@ void ATPSController::ReceivedPlayer()
 	}
 }
 
-void ATPSController::OnMatchStateSet(FName State)
+void ATPSController::OnMatchStateSet(FName State, bool bTeamsMatch)
 {
 	MatchState = State;
 
 	if (MatchState == MatchState::InProgress)
 	{
-		HandleMatchHasStarted();
+		HandleMatchHasStarted(bTeamsMatch);
 	}
 	else if (MatchState == MatchState::Cooldown)
 	{
@@ -448,8 +716,9 @@ void ATPSController::OnRep_MatchState()
 	}
 }
 
-void ATPSController::HandleMatchHasStarted()
+void ATPSController::HandleMatchHasStarted(bool bTeamsMatch)
 {
+	if (HasAuthority()) bShowTeamScores = bTeamsMatch;
 	TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
 	if (TPSHUD)
 	{
@@ -460,6 +729,15 @@ void ATPSController::HandleMatchHasStarted()
 		if (TPSHUD->Announcement)
 		{
 			TPSHUD->Announcement->SetVisibility(ESlateVisibility::Hidden);
+		}
+		if (!HasAuthority()) return;
+		if (bTeamsMatch)
+		{
+			InitTeamScores();
+		}
+		else
+		{
+			HideTeamScores();
 		}
 	}
 }
@@ -477,7 +755,7 @@ void ATPSController::HandleCooldown()
 		if (TPSHUD)
 		{
 			TPSHUD->Announcement->SetVisibility(ESlateVisibility::Visible);
-			FString AnnouncementText("New Match Starts In:");
+			FString AnnouncementText = Announcement::NewMatchStartsIn;
 			TPSHUD->Announcement->AnnouncementText->SetText(FText::FromString(AnnouncementText));
 
 			ATPSGameState* TPSGameState = Cast<ATPSGameState>(UGameplayStatics::GetGameState(this));
@@ -485,27 +763,7 @@ void ATPSController::HandleCooldown()
 			if (TPSGameState && TPSPlayerState)
 			{
 				TArray<ATPSPlayerState*> TopPlayers = TPSGameState->TopScoringPlayers;
-				FString InfoTextString;
-				if (TopPlayers.Num() == 0)
-				{
-					InfoTextString = FString("There is no winner.");
-				}
-				else if (TopPlayers.Num() == 1 && TopPlayers[0] == TPSPlayerState)
-				{
-					InfoTextString = FString("You are the winner!");
-				}
-				else if (TopPlayers.Num() == 1)
-				{
-					InfoTextString = FString::Printf(TEXT("Winner: \n%s"), *TopPlayers[0]->GetPlayerName());
-				}
-				else if (TopPlayers.Num() > 1)
-				{
-					InfoTextString = FString("Players tied for the win:\n");
-					for (auto TiedPlayer : TopPlayers)
-					{
-						InfoTextString.Append(FString::Printf(TEXT("%s\n"), *TiedPlayer->GetPlayerName()));
-					}
-				}
+				FString InfoTextString = bShowTeamScores ? GetTeamsInfoText(TPSGameState) : GetInfoText(TopPlayers);
 
 				TPSHUD->Announcement->InfoText->SetText(FText::FromString(InfoTextString));
 			}
@@ -516,5 +774,43 @@ void ATPSController::HandleCooldown()
 	{
 		TPSCharacter->bDisableGameplay = true;
 		TPSCharacter->GetCombat()->FireButtonPressed(false);
+	}
+}
+
+void ATPSController::BroadcastElim(APlayerState* Attacker, APlayerState* Victim)
+{
+	ClientElimAnnouncement(Attacker, Victim);
+}
+
+void ATPSController::ClientElimAnnouncement_Implementation(APlayerState* Attacker, APlayerState* Victim)
+{
+	APlayerState* Self = GetPlayerState<APlayerState>();
+	if (Attacker && Victim && Self)
+	{
+		TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
+		if (TPSHUD)
+		{
+			if (Attacker == Self && Victim != Self)
+			{
+				TPSHUD->AddElimAnnouncement("You", Victim->GetPlayerName());
+				return;
+			}
+			if (Attacker != Self && Victim == Self)
+			{
+				TPSHUD->AddElimAnnouncement(Attacker->GetPlayerName(), "you");
+				return;
+			}
+			if (Attacker == Victim && Attacker == Self)
+			{
+				TPSHUD->AddElimAnnouncement("You", "yourself");
+				return;
+			}
+			if (Attacker == Victim && Attacker != Self)
+			{
+				TPSHUD->AddElimAnnouncement(Attacker->GetPlayerName(), "themselves");
+				return;
+			}
+			TPSHUD->AddElimAnnouncement(Attacker->GetPlayerName(), Victim->GetPlayerName());
+		}
 	}
 }

@@ -10,6 +10,7 @@ void ATPSPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ATPSPlayerState, Defeats);
+	DOREPLIFETIME(ATPSPlayerState, Team);
 }
 
 void ATPSPlayerState::AddToScore(float ScoreAmount)
@@ -51,6 +52,26 @@ void ATPSPlayerState::AddToDefeats(int32 DefeatsAmount)
 		{
 			Controller->SetHUDDefeats(Defeats);
 		}
+	}
+}
+
+void ATPSPlayerState::OnRep_Team()
+{
+	ATPSCharacter* TCharacter = Cast <ATPSCharacter>(GetPawn());
+	if (TCharacter)
+	{
+		TCharacter->SetTeamColor(Team);
+	}
+}
+
+void ATPSPlayerState::SetTeam(ETeam TeamToSet)
+{
+	Team = TeamToSet;
+
+	ATPSCharacter* TCharacter = Cast <ATPSCharacter>(GetPawn());
+	if (TCharacter)
+	{
+		TCharacter->SetTeamColor(Team);
 	}
 }
 

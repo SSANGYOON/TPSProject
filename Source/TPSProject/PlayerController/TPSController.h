@@ -27,20 +27,27 @@ public:
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void Tick(float DeltaTime) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	void HideTeamScores();
+	void InitTeamScores();
+	void SetHUDRedTeamScore(int32 RedScore);
+	void SetHUDBlueTeamScore(int32 BlueScore);
 
 	virtual float GetServerTime(); //서버 시간과 동기화
 	virtual void ReceivedPlayer() override; // 플레이어 접속시 실행 서버 시간 동기화
-	void OnMatchStateSet(FName State);
-	void HandleMatchHasStarted();
+	void OnMatchStateSet(FName State, bool bTeamsMatch = false);
+	void HandleMatchHasStarted(bool bTeamsMatch = false);
 	void HandleCooldown();
 
 	float SingleTripTime = 0.f;
 
 	FHighPingDelegate HighPingDelegate;
+
+	void BroadcastElim(APlayerState* Attacker, APlayerState* Victim);
 protected:
 	virtual void BeginPlay() override;
 	void SetHUDTime();
 	void PollInit();
+	virtual void SetupInputComponent() override;
 	
 	/*
 	서버 - 클라이언트 동기화
@@ -74,9 +81,53 @@ protected:
 	void StopHighPingWarning();
 	void CheckPing(float DeltaTime);
 
+	void ShowReturnToMainMenu();
+
+	UFUNCTION(Client, Reliable)
+	void ClientElimAnnouncement(APlayerState* Attacker, APlayerState* Victim);
+
+	UPROPERTY(ReplicatedUsing = OnRep_ShowTeamScores)
+	bool bShowTeamScores = false;
+
+	UFUNCTION()
+	void OnRep_ShowTeamScores();
+
+	FString GetInfoText(const TArray<class ATPSPlayerState*>& Players);
+	FString GetTeamsInfoText(class ATPSGameState* TPSGameState);
+public:
+	void AddChat();
+
+	UFUNCTION()
+	void EnterKeyPressed();
+
+	UFUNCTION()
+	void OnTextCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetText(const FString& Text, const FString& PlayerName); //서버로 내가 쓴 채팅을 보냄
+	UFUNCTION(Client, Reliable)
+	void ClientSetText(const FString& Text, const FString& PlayerName); //클라이언트에 다른 사람이 쓴 채팅을 보냄
+
+private:
+	UPROPERTY(EditAnywhere, Category = HUD)
+	TSubclassOf<class UChatOverlay> ChatOverlayClass;
+	UPROPERTY()
+	UChatOverlay* ChatWidget;
+
 private:
 	UPROPERTY()
 	class ATPSHUD* TPSHUD;
+
+	UPROPERTY()
+	class ATPSGameMode* TPSGameMode;
+
+	UPROPERTY(EditAnywhere, Category = HUD)
+	TSubclassOf<class UUserWidget> ReturnToMainMenuWidget;
+
+	UPROPERTY()
+	class UReturnToMainMenu* ReturnToMainMenu;
+
+	bool bReturnToMainMenuOpen = false;
 
 	float LevelStartingTime = 0.f;
 	float MatchTime = 0.f;
@@ -125,4 +176,10 @@ private:
 
 	UPROPERTY(EditAnywhere)
 	float HighPingThreshold = 50.f;
+
+	UPROPERTY(EditAnywhere, Category = Input)
+	class UInputAction* QuitAction;
+
+	UPROPERTY(EditAnywhere, Category = Input)
+	class UInputAction* EnterKeyAction;
 };

@@ -9,10 +9,13 @@
 #include "TPSProject/Interfaces/InteractWithCrosshairsInterface.h"
 #include "Components/TimelineComponent.h"
 #include "TPSProject/Types/CombatState.h"
+#include "TPSProject/Types/Team.h"
 #include "TPSCharacter.generated.h"
 
 class UInputMappingContext;
 class UInputAction;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnLeftGame);
 
 UCLASS()
 class TPSPROJECT_API ATPSCharacter : public ACharacter, public IInteractWithCrosshairsInterface
@@ -38,9 +41,9 @@ public:
 	void PlayThrowGrenadeMontage(const FName& SectionName);
 	void PlaySwapMontage();
 
-	void Elim();
+	void Elim(bool bPlayerLeftGame);
 	UFUNCTION(NetMulticast, Reliable)
-	void MulticastElim();
+	void MulticastElim(bool bPlayerLeftGame);
 	virtual void Destroyed() override;
 
 	UPROPERTY(Replicated)
@@ -62,6 +65,19 @@ public:
 	TMap<FName, class UBoxComponent*> HitCollisionBoxes;
 
 	bool bFinishedSwapping = false;
+
+	UFUNCTION(Server, Reliable)
+	void ServerLeaveGame();
+
+	FOnLeftGame OnLeftGame;
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastGainedTheLead();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastLostTheLead();
+
+	void SetTeamColor(ETeam Team);
 
 protected:
 	virtual void BeginPlay() override;
@@ -212,7 +228,7 @@ private:
 	class ULagCompensationComponent* LagCompensation;
 
 	UFUNCTION(Server, Reliable)
-		void ServerEquipButtonPressed();
+	void ServerEquipButtonPressed();
 
 	float AO_Yaw;
 	float InterpAO_Yaw;
@@ -286,6 +302,8 @@ private:
 
 	void ElimTimerFinished();
 
+	bool bLeftGame = false;
+
 	UPROPERTY(VisibleAnywhere)
 	UTimelineComponent* DissolveTimeline;
 	FOnTimelineFloat DissolveTrack;
@@ -303,6 +321,25 @@ private:
 	UPROPERTY(EditAnywhere, Category = Elim)
 	UMaterialInstance* DissolveMaterialInstance;
 
+	/**
+	* Team colors
+	*/
+
+	UPROPERTY(EditAnywhere, Category = Elim)
+	UMaterialInstance* RedDissolveMatInst;
+
+	UPROPERTY(EditAnywhere, Category = Elim)
+	UMaterialInstance* RedMaterial;
+
+	UPROPERTY(EditAnywhere, Category = Elim)
+	UMaterialInstance* BlueDissolveMatInst;
+
+	UPROPERTY(EditAnywhere, Category = Elim)
+	UMaterialInstance* BlueMaterial;
+
+	UPROPERTY(EditAnywhere, Category = Elim)
+	UMaterialInstance* OriginalMaterial;
+
 	UPROPERTY(EditAnywhere)
 	UParticleSystem* ReaperEffect;
 
@@ -314,6 +351,12 @@ private:
 
 	UPROPERTY()
 	class ATPSPlayerState* TPSPlayerState;
+
+	UPROPERTY(EditAnywhere, Category = "Lead Effect")
+	class UNiagaraSystem* CrownSystem;
+
+	UPROPERTY()
+	class UNiagaraComponent* CrownComponent;
 
 	UPROPERTY(VisibleAnywhere)
 	UStaticMeshComponent* AttachedGrenade;
@@ -330,6 +373,9 @@ private:
 
 	UPROPERTY(EditAnywhere)
 	TSubclassOf<AWeapon> DefaultWeaponClass;
+
+	UPROPERTY()
+	class ATPSGameMode* TPSGameMode;
 
 public:
 	void SetOverlappingWeapon(AWeapon* Weapon);

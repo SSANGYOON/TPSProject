@@ -33,6 +33,7 @@ void AProjectileWeapon::Fire(const FVector& HitTarget)
 					SpawnedProjectile = World->SpawnActor<AProjectile>(ProjectileClass, SocketTransform.GetLocation(), TargetRotation, SpawnParams);
 					SpawnedProjectile->bUseServerSideRewind = false;
 					SpawnedProjectile->Damage = Damage;
+					SpawnedProjectile->HeadShotDamage = HeadShotDamage;
 				}
 				else // 서버에서 클라이언트 컨트롤 액터
 				{
@@ -48,7 +49,6 @@ void AProjectileWeapon::Fire(const FVector& HitTarget)
 					SpawnedProjectile->bUseServerSideRewind = true;
 					SpawnedProjectile->TraceStart = SocketTransform.GetLocation();
 					SpawnedProjectile->InitialVelocity = SpawnedProjectile->GetActorForwardVector() * SpawnedProjectile->InitialSpeed;
-					SpawnedProjectile->Damage = Damage;
 				}
 				else // 클라이언트에서 컨트롤하지 않는 엑터 ssr사용하지 않음
 				{
@@ -64,6 +64,7 @@ void AProjectileWeapon::Fire(const FVector& HitTarget)
 				SpawnedProjectile = World->SpawnActor<AProjectile>(ProjectileClass, SocketTransform.GetLocation(), TargetRotation, SpawnParams);
 				SpawnedProjectile->bUseServerSideRewind = false;
 				SpawnedProjectile->Damage = Damage;
+				SpawnedProjectile->HeadShotDamage = HeadShotDamage;
 			}
 		}
 	}

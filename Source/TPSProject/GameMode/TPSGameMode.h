@@ -23,7 +23,8 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	virtual void PlayerEliminated(class ATPSCharacter* ElimmedCharacter, class ATPSController* VictimController, ATPSController* AttackerController);
 	virtual void RequestRespawn(ACharacter* ElimmedCharacter, AController* ElimmedController);
-
+	void PlayerLeftGame(class ATPSPlayerState* PlayerLeaving);
+	virtual float CalculateDamage(AController* Attacker, AController* Victim, float BaseDamage);
 	/*매치 시작 전 대기시간*/
 	UPROPERTY(EditDefaultsOnly)
 	float WarmupTime = 10.f;
@@ -35,6 +36,10 @@ public:
 	float CooldownTime = 10.f;
 
 	float LevelStartingTime = 0.f;
+
+	bool bTeamsMatch = false;
+
+	void SendChat(const FString& Text, const FString& PlayerName);
 
 protected:
 	virtual void BeginPlay() override;

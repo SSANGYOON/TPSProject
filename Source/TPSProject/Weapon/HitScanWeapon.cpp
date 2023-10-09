@@ -10,7 +10,6 @@
 #include "Sound/SoundCue.h"
 #include "WeaponTypes.h"
 #include "TPSProject/TPSComponent/LagCompensationComponent.h"
-#include "DrawDebugHelpers.h"
 
 void AHitScanWeapon::Fire(const FVector& HitTarget)
 {
@@ -35,9 +34,10 @@ void AHitScanWeapon::Fire(const FVector& HitTarget)
 			bool bCauseAuthDamage = !bUseServerSideRewind || OwnerPawn->IsLocallyControlled();
 			if (HasAuthority() && bCauseAuthDamage)
 			{
+				const float DamageToCause = FireHit.BoneName.ToString() == FString("head") ? HeadShotDamage : Damage;
 				UGameplayStatics::ApplyDamage(
 					TPSCharacter,
-					Damage,
+					DamageToCause,
 					InstigatorController,
 					this,
 					UDamageType::StaticClass()
@@ -53,8 +53,7 @@ void AHitScanWeapon::Fire(const FVector& HitTarget)
 						TPSCharacter,
 						Start,
 						HitTarget,
-						TPSOwnerController->GetServerTime() - TPSOwnerController->SingleTripTime,
-						this
+						TPSOwnerController->GetServerTime() - TPSOwnerController->SingleTripTime
 					);
 				}
 			}
@@ -114,7 +113,10 @@ void AHitScanWeapon::WeaponTraceHit(const FVector& TraceStart, const FVector& Hi
 		{
 			BeamEnd = OutHit.ImpactPoint;
 		}
-		DrawDebugSphere(GetWorld(), BeamEnd, 16.f, 12, FColor::Orange, true);
+		else
+		{
+			OutHit.ImpactPoint = End;
+		}
 		if (BeamParticles)
 		{
 			UParticleSystemComponent* Beam = UGameplayStatics::SpawnEmitterAtLocation(

@@ -27,6 +27,7 @@ void AShotgun::FireShotgun(const TArray<FVector_NetQuantize>& HitTargets)
 
 		// Maps hit character to number of times hit
 		TMap<ATPSCharacter*, uint32> HitMap;
+		TMap<ATPSCharacter*, uint32> HeadShotHitMap;
 		for (FVector_NetQuantize HitTarget : HitTargets)
 		{
 			FHitResult FireHit;
@@ -35,13 +36,28 @@ void AShotgun::FireShotgun(const TArray<FVector_NetQuantize>& HitTargets)
 			ATPSCharacter* TPSCharacter = Cast<ATPSCharacter>(FireHit.GetActor());
 			if (TPSCharacter)
 			{
-				if (HitMap.Contains(TPSCharacter))
+				const bool bHeadShot = FireHit.BoneName.ToString() == FString("head");
+				if (bHeadShot)
 				{
-					HitMap[TPSCharacter]++;
+					if (HeadShotHitMap.Contains(TPSCharacter))
+					{
+						HeadShotHitMap[TPSCharacter]++;
+					}
+					else 
+					{
+						HeadShotHitMap.Emplace(TPSCharacter, 1);
+					}
 				}
 				else
 				{
-					HitMap.Emplace(TPSCharacter, 1);
+					if (HitMap.Contains(TPSCharacter))
+					{
+						HitMap[TPSCharacter]++;
+					}
+					else
+					{
+						HitMap.Emplace(TPSCharacter, 1);
+					}
 				}
 				if (ImpactParticles)
 				{
@@ -65,26 +81,52 @@ void AShotgun::FireShotgun(const TArray<FVector_NetQuantize>& HitTargets)
 			}
 		}
 		TArray<ATPSCharacter*> HitCharacters;
+		//캐릭터별 적용해야 하는 데미지
+		TMap<ATPSCharacter*, float> DamageMap;
 
 		for (auto HitPair : HitMap)
 		{
-			if (HitPair.Key && InstigatorController)
+			if (HitPair.Key)
+			{
+				DamageMap.Emplace(HitPair.Key, HitPair.Value * Damage);
+				HitCharacters.AddUnique(HitPair.Key);
+			}
+		}
+
+		for (auto HeadShotHitPair : HeadShotHitMap)
+		{
+			if (HeadShotHitPair.Key)
+			{
+				if (DamageMap.Contains(HeadShotHitPair.Key))
+				{
+					DamageMap[HeadShotHitPair.Key] += HeadShotHitPair.Value * HeadShotDamage;
+				}
+				else
+				{
+					DamageMap.Emplace(HeadShotHitPair.Key, HeadShotHitPair.Value * HeadShotDamage);
+				}
+				HitCharacters.AddUnique(HeadShotHitPair.Key);
+			}
+		}
+
+		for (auto DamagePair : DamageMap)
+		{
+			if (DamagePair.Key && InstigatorController)
 			{
 				bool bCauseAuthDamage = !bUseServerSideRewind || OwnerPawn->IsLocallyControlled();
 				if (HasAuthority() && bCauseAuthDamage)
 				{
 					UGameplayStatics::ApplyDamage(
-						HitPair.Key,
-						Damage * HitPair.Value,
+						DamagePair.Key,
+						DamagePair.Value,
 						InstigatorController,
 						this,
 						UDamageType::StaticClass()
 					);
 				}
-
-				HitCharacters.Add(HitPair.Key);
 			}
 		}
+
 		if (!HasAuthority() && bUseServerSideRewind)
 		{
 			TPSOwnerCharacter = TPSOwnerCharacter == nullptr ? Cast<ATPSCharacter>(OwnerPawn) : TPSOwnerCharacter;
