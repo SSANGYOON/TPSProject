@@ -9,6 +9,7 @@
 namespace MatchState
 {
 	extern TPSPROJECT_API const FName Cooldown; // 매치시간 종료 후 도달하는 state
+	extern TPSPROJECT_API const FName VoteForNewGame;
 }
 
 /**
@@ -37,6 +38,8 @@ public:
 
 	float LevelStartingTime = 0.f;
 
+	float VoteTime = 5.f;
+
 	bool bTeamsMatch = false;
 
 	void SendChat(const FString& Text, const FString& PlayerName);
@@ -47,4 +50,5 @@ protected:
 
 private:
 	float CountdownTime = 0.f;
+	
 };

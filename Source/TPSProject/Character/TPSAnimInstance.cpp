@@ -7,6 +7,7 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "TPSProject/Weapon/Weapon.h"
 #include "TPSProject/Types/CombatState.h"
+#include "TPSProject/TPSComponent/CombatComponent.h"
 
 void UTPSAnimInstance::NativeInitializeAnimation()
 {
@@ -38,7 +39,7 @@ void UTPSAnimInstance::NativeUpdateAnimation(float DeltaTime)
 	TurningInPlace = TPSCharacter->GetTurningInPlace();
 	bRotateRootBone = TPSCharacter->ShouldRotateRootBone();
 	bElimmed = TPSCharacter->IsElimmed();
-
+	bHoldingTheFlag = TPSCharacter->IsHoldingTheFlag();
 
 	// Offset Yaw for Strafing
 	FRotator AimRotation = TPSCharacter->GetBaseAimRotation();

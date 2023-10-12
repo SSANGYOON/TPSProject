@@ -20,6 +20,8 @@ void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, FS
 {
 	if (!IsValidSessionInterface())
 	{
+		DesiredNumPublicConnections = NumPublicConnections;
+		DesiredMatchType = MatchType;
 		return;
 	}
 

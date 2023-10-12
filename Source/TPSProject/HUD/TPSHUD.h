@@ -45,7 +45,11 @@ public:
 	class UAnnouncement* Announcement;
 
 	void AddAnnouncement();
+	void AddVoteWidget();
 	void AddElimAnnouncement(FString Attacker, FString Victim);
+
+	UPROPERTY()
+	class UVoteForNewGame* VoteForNewGameWidget;
 
 protected:
 	virtual void BeginPlay() override;
@@ -72,6 +76,9 @@ private:
 
 	UPROPERTY()
 	TArray<UElimAnnouncement*> ElimMessages;
+
+	UPROPERTY(EditAnywhere)
+	TSubclassOf<UVoteForNewGame> VoteForNewGameClass;
 public:
 	FORCEINLINE void SetHUDPackage(const FHUDPackage& Package) { HUDPackage = Package; }
 };

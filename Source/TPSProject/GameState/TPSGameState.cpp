@@ -13,6 +13,8 @@ void ATPSGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(ATPSGameState, TopScoringPlayers);
 	DOREPLIFETIME(ATPSGameState, RedTeamScore);
 	DOREPLIFETIME(ATPSGameState, BlueTeamScore);
+	DOREPLIFETIME(ATPSGameState, RestartAgree);
+	DOREPLIFETIME(ATPSGameState, RestartDisagree);
 }
 
 void ATPSGameState::UpdateTopScore(class ATPSPlayerState* ScoringPlayer)
@@ -69,5 +71,43 @@ void ATPSGameState::OnRep_BlueTeamScore()
 	if (TPlayer)
 	{
 		TPlayer->SetHUDBlueTeamScore(BlueTeamScore);
+	}
+}
+
+void ATPSGameState::NewGameAgree()
+{
+	RestartAgree++;
+	ATPSController* TPlayer = Cast<ATPSController>(GetWorld()->GetFirstPlayerController());
+	if (TPlayer)
+	{
+		TPlayer->SetHUDNewGameAgree(RestartAgree);
+	}
+}
+
+void ATPSGameState::NewGameDisagree()
+{
+	RestartDisagree++;
+	ATPSController* TPlayer = Cast<ATPSController>(GetWorld()->GetFirstPlayerController());
+	if (TPlayer)
+	{
+		TPlayer->SetHUDNewGameDisagree(RestartDisagree);
+	}
+}
+
+void ATPSGameState::OnRep_Agree()
+{
+	ATPSController* TPlayer = Cast<ATPSController>(GetWorld()->GetFirstPlayerController());
+	if (TPlayer)
+	{
+		TPlayer->SetHUDNewGameAgree(RestartAgree);
+	}
+}
+
+void ATPSGameState::OnRep_Disagree()
+{
+	ATPSController* TPlayer = Cast<ATPSController>(GetWorld()->GetFirstPlayerController());
+	if (TPlayer)
+	{
+		TPlayer->SetHUDNewGameDisagree(RestartDisagree);
 	}
 }

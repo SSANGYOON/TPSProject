@@ -12,6 +12,7 @@
 namespace MatchState
 {
 	const FName Cooldown = FName("Cooldown");
+	const FName VoteForNewGame = FName("VoteForNewGame");
 }
 
 ATPSGameMode::ATPSGameMode()
@@ -65,7 +66,23 @@ void ATPSGameMode::Tick(float DeltaTime)
 		CountdownTime = CooldownTime + WarmupTime + MatchTime - GetWorld()->GetTimeSeconds() + LevelStartingTime;
 		if (CountdownTime <= 0.f)
 		{
-			RestartGame();
+			SetMatchState(MatchState::VoteForNewGame);
+		}
+	}
+
+	else if (MatchState == MatchState::VoteForNewGame)
+	{
+		CountdownTime = VoteTime + CooldownTime + WarmupTime + MatchTime - GetWorld()->GetTimeSeconds() + LevelStartingTime;
+		if (CountdownTime <= 0.f)
+		{
+			if (GetGameState<ATPSGameState>()->RestartAgree == GetWorld()->GetNumPlayerControllers())
+			{
+				RestartGame();
+			}
+			else
+			{
+				ReturnToMainMenuHost();
+			}
 		}
 	}
 }

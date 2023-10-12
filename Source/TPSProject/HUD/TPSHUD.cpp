@@ -6,6 +6,7 @@
 #include "CharacterOverlay.h"
 #include "Announcement.h"
 #include "ElimAnnouncement.h"
+#include "VoteForNewGame.h"
 #include "Components/HorizontalBox.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "Components/CanvasPanelSlot.h"
@@ -22,6 +23,16 @@ void ATPSHUD::AddAnnouncement()
 	{
 		Announcement = CreateWidget<UAnnouncement>(OwningPlayer, AnnouncementClass);
 		Announcement->AddToViewport();
+	}
+}
+
+void ATPSHUD::AddVoteWidget()
+{
+	OwningPlayer = OwningPlayer == nullptr ? GetOwningPlayerController() : OwningPlayer;
+	if (OwningPlayer && VoteForNewGameClass)
+	{
+		VoteForNewGameWidget = CreateWidget<UVoteForNewGame>(OwningPlayer, VoteForNewGameClass);
+		VoteForNewGameWidget->AddToViewport();
 	}
 }
 

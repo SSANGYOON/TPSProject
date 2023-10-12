@@ -36,6 +36,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "TPSProject/GameState/TPSGameState.h"
+#include "TPSProject/PlayerStart/TeamPlayerStart.h"
 
 ATPSCharacter::ATPSCharacter()
 {
@@ -358,6 +359,41 @@ void ATPSCharacter::DropOrDestroyWeapons()
 		{
 			DropOrDestroyWeapon(Combat->SecondaryWeapon);
 		}
+		if (Combat->TheFlag)
+		{
+			Combat->TheFlag->Dropped();
+		}
+	}
+}
+
+void ATPSCharacter::OnPlayerStateInitialized()
+{
+	TPSPlayerState->AddToScore(0.f);
+	TPSPlayerState->AddToDefeats(0);
+	SetTeamColor(TPSPlayerState->GetTeam());
+	SetSpawnPoint();
+}
+
+void ATPSCharacter::SetSpawnPoint()
+{
+	if (HasAuthority() && TPSPlayerState->GetTeam() != ETeam::ET_NoTeam)
+	{
+		TArray<AActor*> PlayerStarts;
+		UGameplayStatics::GetAllActorsOfClass(this, ATeamPlayerStart::StaticClass(), PlayerStarts);
+		TArray<ATeamPlayerStart*> TeamPlayerStarts;
+		for (auto Start : PlayerStarts)
+		{
+			ATeamPlayerStart* TeamStart = Cast<ATeamPlayerStart>(Start);
+			if (TeamStart && TeamStart->Team == TPSPlayerState->GetTeam())
+			{
+				TeamPlayerStarts.Add(TeamStart);
+			}
+		}
+		if (TeamPlayerStarts.Num() > 0)
+		{
+			ATeamPlayerStart* ChosenPlayerStart = TeamPlayerStarts[FMath::RandRange(0, TeamPlayerStarts.Num() - 1)];
+			SetActorLocationAndRotation(ChosenPlayerStart->GetTargetLocation(), ChosenPlayerStart->GetActorRotation());
+		}
 	}
 }
 
@@ -524,6 +560,15 @@ void ATPSCharacter::Tick(float DeltaTime)
 
 void ATPSCharacter::RotateInPlace(float DeltaTime)
 {
+	if (Combat && Combat->bHoldingTheFlag)
+	{
+		bUseControllerRotationYaw = false;
+		GetCharacterMovement()->bOrientRotationToMovement = true;
+		TurningInPlace = ETurningInPlace::ETIP_NotTurning;
+		return;
+	}
+	if (Combat && Combat->EquippedWeapon) GetCharacterMovement()->bOrientRotationToMovement = false;
+	if (Combat && Combat->EquippedWeapon) bUseControllerRotationYaw = true;
 	if (bDisableGameplay)
 	{
 		bUseControllerRotationYaw = false;
@@ -624,6 +669,7 @@ void ATPSCharacter::EquipButtonPressed()
 	if (bDisableGameplay) return;
 	if (Combat)
 	{
+		if (Combat->bHoldingTheFlag) return;
 		if (Combat->CombatState == ECombatState::ECS_Unoccupied) ServerEquipButtonPressed();
 		bool bSwap = Combat->ShouldSwapWeapons() &&
 			!HasAuthority() &&
@@ -656,7 +702,7 @@ void ATPSCharacter::ServerEquipButtonPressed_Implementation()
 
 void ATPSCharacter::CrouchButtonPressed()
 {
-	if (bDisableGameplay) return;
+	if (bDisableGameplay || Combat->bHoldingTheFlag) return;
 	if (bIsCrouched)
 	{
 		UnCrouch();
@@ -669,6 +715,7 @@ void ATPSCharacter::CrouchButtonPressed()
 
 void ATPSCharacter::AimButtonPressed()
 {
+	if (Combat->bHoldingTheFlag) return;
 	if (bDisableGameplay) return;
 	if (Combat)
 	{
@@ -678,6 +725,7 @@ void ATPSCharacter::AimButtonPressed()
 
 void ATPSCharacter::AimButtonReleased()
 {
+	if (Combat->bHoldingTheFlag) return;
 	if (bDisableGameplay) return;
 	if (Combat)
 	{
@@ -687,6 +735,7 @@ void ATPSCharacter::AimButtonReleased()
 
 void ATPSCharacter::Jump()
 {
+	if (Combat && Combat->bHoldingTheFlag) return;
 	if (bDisableGameplay) return;
 	if (bIsCrouched)
 	{
@@ -785,7 +834,7 @@ void ATPSCharacter::SimProxiesTurn()
 
 void ATPSCharacter::FireStart()
 {
-	if (bDisableGameplay) return;
+	if (bDisableGameplay || Combat->bHoldingTheFlag) return;
 	if (Combat->CombatState == ECombatState::ECS_GrenadeAim)
 	{
 		Combat->ThrowGrenade();
@@ -798,7 +847,7 @@ void ATPSCharacter::FireStart()
 
 void ATPSCharacter::FireEnd()
 {
-	if (bDisableGameplay) return;
+	if (bDisableGameplay || Combat->bHoldingTheFlag) return;
 	if (Combat)
 	{
 		Combat->FireButtonPressed(false);
@@ -818,6 +867,7 @@ void ATPSCharacter::GrenadeThrow()
 {
 	if (Combat)
 	{
+		if (Combat->bHoldingTheFlag) return;
 		Combat->StartGrenade();
 	}
 }
@@ -986,9 +1036,8 @@ void ATPSCharacter::PollInit()
 		TPSPlayerState = GetPlayerState<ATPSPlayerState>();
 		if (TPSPlayerState)
 		{
-			TPSPlayerState->AddToScore(0.f);
-			TPSPlayerState->AddToDefeats(0);
-			SetTeamColor(TPSPlayerState->GetTeam());
+			OnPlayerStateInitialized();
+
 			ATPSGameState* TPSGameState = Cast<ATPSGameState>(UGameplayStatics::GetGameState(this));
 			if (TPSGameState && TPSGameState->TopScoringPlayers.Contains(TPSPlayerState))
 			{
@@ -1067,4 +1116,23 @@ bool ATPSCharacter::IsLocallyReloading()
 {
 	if (Combat == nullptr) return false;
 	return Combat->bLocallyReloading;
+}
+
+bool ATPSCharacter::IsHoldingTheFlag() const
+{
+	if (Combat == nullptr) return false;
+	return Combat->bHoldingTheFlag;
+}
+
+ETeam ATPSCharacter::GetTeam()
+{
+	TPSPlayerState = TPSPlayerState == nullptr ? GetPlayerState<ATPSPlayerState>() : TPSPlayerState;
+	if (TPSPlayerState == nullptr) return ETeam::ET_NoTeam;
+	return TPSPlayerState->GetTeam();
+}
+
+void ATPSCharacter::SetHoldingTheFlag(bool bHolding)
+{
+	if (Combat == nullptr) return;
+	Combat->bHoldingTheFlag = bHolding;
 }

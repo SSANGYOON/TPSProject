@@ -32,13 +32,28 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_BlueTeamScore)
 	float BlueTeamScore = 0.f;
 
-
 	UFUNCTION()
 	void OnRep_RedTeamScore();
 
 	UFUNCTION()
 	void OnRep_BlueTeamScore();
-private:
 
+	void NewGameAgree();
+	void NewGameDisagree();
+
+	UPROPERTY(ReplicatedUsing = OnRep_Agree)
+	float RestartAgree = 0.f;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Disagree)
+	float RestartDisagree = 0.f;
+
+	UFUNCTION()
+	void OnRep_Agree();
+
+	UFUNCTION()
+	void OnRep_Disagree();
+
+
+private:
 	float TopScore = 0.f;
 };

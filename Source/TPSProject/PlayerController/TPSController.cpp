@@ -20,6 +20,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "TPSProject/HUD/ChatOverlay.h"
+#include "TPSProject/HUD/VoteForNewGame.h"
 #include "Components/EditableText.h"
 
 void ATPSController::BeginPlay()
@@ -118,6 +119,28 @@ void ATPSController::ClientSetText_Implementation(const FString& Text, const FSt
 	}
 }
 
+void ATPSController::ServerNewGameAgree_Implementation()
+{
+	auto GameMode = UGameplayStatics::GetGameMode(this);
+	if (GameMode)
+	{
+		ATPSGameState* GameState =  GameMode->GetGameState<ATPSGameState>();
+		GameState->NewGameAgree();
+	}
+
+}
+
+void ATPSController::ServerNewGameDisagree_Implementation()
+{
+	auto GameMode = UGameplayStatics::GetGameMode(this);
+	if (GameMode)
+	{
+		ATPSGameState* GameState = GameMode->GetGameState<ATPSGameState>();
+		GameState->NewGameDisagree();
+	}
+}
+
+
 void ATPSController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -183,6 +206,32 @@ void ATPSController::SetHUDBlueTeamScore(int32 BlueScore)
 	{
 		FString ScoreText = FString::Printf(TEXT("%d"), BlueScore);
 		TPSHUD->CharacterOverlay->BlueTeamScore->SetText(FText::FromString(ScoreText));
+	}
+}
+
+void ATPSController::SetHUDNewGameAgree(int32 Agree)
+{
+	TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
+	bool bHUDValid = TPSHUD &&
+		TPSHUD->VoteForNewGameWidget &&
+		TPSHUD->VoteForNewGameWidget->AgreeNum;
+	if (bHUDValid)
+	{
+		FString AgreeText = FString::Printf(TEXT("%d"), Agree);
+		TPSHUD->VoteForNewGameWidget->AgreeNum->SetText(FText::FromString(AgreeText));
+	}
+}
+
+void ATPSController::SetHUDNewGameDisagree(int32 Disagree)
+{
+	TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
+	bool bHUDValid = TPSHUD &&
+		TPSHUD->VoteForNewGameWidget &&
+		TPSHUD->VoteForNewGameWidget->DisagreeNum;
+	if (bHUDValid)
+	{
+		FString DisagreeText = FString::Printf(TEXT("%d"), Disagree);
+		TPSHUD->VoteForNewGameWidget->DisagreeNum->SetText(FText::FromString(DisagreeText));
 	}
 }
 
@@ -392,18 +441,21 @@ void ATPSController::ServerCheckMatchState_Implementation()
 		MatchTime = GameMode->MatchTime;
 		CooldownTime = GameMode->CooldownTime;
 		LevelStartingTime = GameMode->LevelStartingTime;
+		VoteTime = GameMode->VoteTime;
 		MatchState = GameMode->GetMatchState();
-		ClientJoinMidgame(MatchState, WarmupTime, MatchTime, CooldownTime, LevelStartingTime);
+		ClientJoinMidgame(MatchState, WarmupTime, MatchTime, CooldownTime, VoteTime, LevelStartingTime);
 	}
 }
 
-void ATPSController::ClientJoinMidgame_Implementation(FName StateOfMatch, float Warmup, float Match, float Cooldown, float StartingTime)
+void ATPSController::ClientJoinMidgame_Implementation(FName StateOfMatch, float Warmup, float Match, float Cooldown, float Vote, float StartingTime)
 {
 	WarmupTime = Warmup;
 	MatchTime = Match;
 	CooldownTime = Cooldown;
 	LevelStartingTime = StartingTime;
+	VoteTime = Vote;
 	MatchState = StateOfMatch;
+	
 	OnMatchStateSet(MatchState);
 	if (TPSHUD && MatchState == MatchState::WaitingToStart)
 	{
@@ -582,6 +634,28 @@ void ATPSController::SetHUDAnnouncementCountdown(float CountdownTime)
 	}
 }
 
+void ATPSController::SetHUDVoteCountDown(float CountdownTime)
+{
+	TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
+	bool bHUDValid = TPSHUD &&
+		TPSHUD->VoteForNewGameWidget &&
+		TPSHUD->VoteForNewGameWidget->VoteTime;
+	if (bHUDValid)
+	{
+		if (CountdownTime < 0.f)
+		{
+			TPSHUD->VoteForNewGameWidget->VoteTime->SetText(FText());
+			return;
+		}
+
+		int32 Minutes = FMath::FloorToInt(CountdownTime / 60.f);
+		int32 Seconds = CountdownTime - Minutes * 60;
+
+		FString CountdownText = FString::Printf(TEXT("%02d:%02d"), Minutes, Seconds);
+		TPSHUD->VoteForNewGameWidget->VoteTime->SetText(FText::FromString(CountdownText));
+	}
+}
+
 void ATPSController::SetHUDGrenades(int32 Grenades)
 {
 	TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
@@ -606,6 +680,7 @@ void ATPSController::SetHUDTime()
 	if (MatchState == MatchState::WaitingToStart) TimeLeft = WarmupTime - GetServerTime() + LevelStartingTime;
 	else if (MatchState == MatchState::InProgress) TimeLeft = WarmupTime + MatchTime - GetServerTime() + LevelStartingTime;
 	else if (MatchState == MatchState::Cooldown) TimeLeft = CooldownTime + WarmupTime + MatchTime - GetServerTime() + LevelStartingTime;
+	else if (MatchState == MatchState::VoteForNewGame) TimeLeft = VoteTime + CooldownTime + WarmupTime + MatchTime - GetServerTime() + LevelStartingTime;
 
 	uint32 SecondsLeft = FMath::CeilToInt(TimeLeft);
 	if (CountdownInt != SecondsLeft)
@@ -617,6 +692,10 @@ void ATPSController::SetHUDTime()
 		if (MatchState == MatchState::InProgress)
 		{
 			SetHUDMatchCountdown(TimeLeft);
+		}
+		if (MatchState == MatchState::VoteForNewGame)
+		{
+			SetHUDVoteCountDown(TimeLeft);
 		}
 	}
 
@@ -702,6 +781,11 @@ void ATPSController::OnMatchStateSet(FName State, bool bTeamsMatch)
 	{
 		HandleCooldown();
 	}
+
+	else if (MatchState == MatchState::VoteForNewGame)
+	{
+		StartVote();
+	}
 }
 
 void ATPSController::OnRep_MatchState()
@@ -713,6 +797,10 @@ void ATPSController::OnRep_MatchState()
 	else if (MatchState == MatchState::Cooldown)
 	{
 		HandleCooldown();
+	}
+	else if (MatchState == MatchState::VoteForNewGame)
+	{
+		StartVote();
 	}
 }
 
@@ -774,6 +862,29 @@ void ATPSController::HandleCooldown()
 	{
 		TPSCharacter->bDisableGameplay = true;
 		TPSCharacter->GetCombat()->FireButtonPressed(false);
+	}
+}
+
+void ATPSController::StartVote()
+{
+	TPSHUD = TPSHUD == nullptr ? Cast<ATPSHUD>(GetHUD()) : TPSHUD;
+	if (TPSHUD)
+	{
+		if (TPSHUD->Announcement)
+		{
+			TPSHUD->Announcement->SetVisibility(ESlateVisibility::Hidden);
+		}
+		TPSHUD->AddVoteWidget();
+
+		if (TPSHUD->VoteForNewGameWidget)
+		{
+			TPSHUD->VoteForNewGameWidget->SetVisibility(ESlateVisibility::Visible);
+
+			FInputModeGameAndUI InputMode;
+			InputMode.SetWidgetToFocus(TPSHUD->VoteForNewGameWidget->TakeWidget());
+			SetInputMode(InputMode);
+			SetShowMouseCursor(true);
+		}
 	}
 }
 

@@ -23,6 +23,7 @@ public:
 	void SetHUDCarriedAmmo(int32 Ammo);
 	void SetHUDMatchCountdown(float CountdownTime);
 	void SetHUDAnnouncementCountdown(float CountdownTime);
+	void SetHUDVoteCountDown(float CountdownTime);
 	void SetHUDGrenades(int32 Grenades);
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void Tick(float DeltaTime) override;
@@ -32,11 +33,17 @@ public:
 	void SetHUDRedTeamScore(int32 RedScore);
 	void SetHUDBlueTeamScore(int32 BlueScore);
 
+	void SetHUDNewGameAgree(int32 Agree);
+	void SetHUDNewGameDisagree(int32 Disagree);
+
+
+
 	virtual float GetServerTime(); //서버 시간과 동기화
 	virtual void ReceivedPlayer() override; // 플레이어 접속시 실행 서버 시간 동기화
 	void OnMatchStateSet(FName State, bool bTeamsMatch = false);
 	void HandleMatchHasStarted(bool bTeamsMatch = false);
 	void HandleCooldown();
+	void StartVote();
 
 	float SingleTripTime = 0.f;
 
@@ -75,7 +82,7 @@ protected:
 	void ServerCheckMatchState();
 
 	UFUNCTION(Client, Reliable)
-	void ClientJoinMidgame(FName StateOfMatch, float Warmup, float Match, float Cooldown, float StartingTime);
+	void ClientJoinMidgame(FName StateOfMatch, float Warmup, float Match, float Cooldown, float Vote, float StartingTime);
 
 	void HighPingWarning();
 	void StopHighPingWarning();
@@ -108,6 +115,12 @@ public:
 	UFUNCTION(Client, Reliable)
 	void ClientSetText(const FString& Text, const FString& PlayerName); //클라이언트에 다른 사람이 쓴 채팅을 보냄
 
+	UFUNCTION(Server, Reliable)
+	void ServerNewGameAgree();
+
+	UFUNCTION(Server, Reliable)
+	void ServerNewGameDisagree();
+
 private:
 	UPROPERTY(EditAnywhere, Category = HUD)
 	TSubclassOf<class UChatOverlay> ChatOverlayClass;
@@ -133,6 +146,7 @@ private:
 	float MatchTime = 0.f;
 	float WarmupTime = 0.f;
 	float CooldownTime = 0.f;
+	float VoteTime = 0.f;
 	uint32 CountdownInt = 0;
 
 	UPROPERTY(ReplicatedUsing = OnRep_MatchState)
