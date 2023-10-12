@@ -16,6 +16,7 @@ void ALobbyGameMode::PostLogin(APlayerController* NewPlayer)
 		{
 			bUseSeamlessTravel = true;
 			World->ServerTravel(FString("/Game/Asian_Village/maps/BlasterMap?listen"));
+					World->ServerTravel(FString("/Game/Asian_Village/Maps/BlasterMap?listen"));
 		}
 	}
 }
