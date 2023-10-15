@@ -78,13 +78,13 @@ protected:
 	void LocalFire(const FVector_NetQuantize& TraceHitTarget);
 	void ShotgunLocalFire(const TArray<FVector_NetQuantize>& TraceHitTargets);
 
-	UFUNCTION(Server, Reliable, WithValidation)
+	UFUNCTION(Server, Reliable)
 	void ServerFire(const FVector_NetQuantize& TraceHitTarget, float FireDelay);
 	
 	UFUNCTION(Server, Reliable)
 	void MulticastFire(const FVector_NetQuantize& TraceHitTarget);
 
-	UFUNCTION(Server, Reliable, WithValidation)
+	UFUNCTION(Server, Reliable)
 	void ServerShotgunFire(const TArray<FVector_NetQuantize>& TraceHitTargets, float FireDelay);
 
 	UFUNCTION(NetMulticast, Reliable)
@@ -138,10 +138,10 @@ private:
 	UPROPERTY()
 	ATPSHUD* HUD;
 
-	UPROPERTY(ReplicatedUsing = OnRep_EquippedWeapon)
+	UPROPERTY(ReplicatedUsing = OnRep_EquippedWeapon, BluePrintReadOnly, meta = (AllowPrivateAccess = "true"))
 	AWeapon* EquippedWeapon;
 
-	UPROPERTY(ReplicatedUsing = OnRep_SecondaryWeapon)
+	UPROPERTY(ReplicatedUsing = OnRep_SecondaryWeapon, BluePrintReadOnly, meta =(AllowPrivateAccess = "true"))
 	AWeapon* SecondaryWeapon;
 
 	UPROPERTY(ReplicatedUsing = OnRep_Aiming)
@@ -265,5 +265,6 @@ private:
 
 public:
 	FORCEINLINE int32 GetGrenades() const { return Grenades; }
+	FORCEINLINE AWeapon* GetEqipppedWeapon() const { return EquippedWeapon; }
 	bool ShouldSwapWeapons();
 };

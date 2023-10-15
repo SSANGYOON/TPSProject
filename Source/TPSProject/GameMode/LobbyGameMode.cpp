@@ -2,8 +2,10 @@
 
 
 #include "LobbyGameMode.h"
-#include "GameFramework/GameStateBase.h"
+#include "TPSProject/GameState/LobbyGameState.h"
 #include "MultiplayerSessionsSubsystem.h"
+#include "TPSProject/PlayerController/TPSController.h"
+#include "TPSProject/PlayerState/TPSPlayerState.h"
 
 void ALobbyGameMode::PostLogin(APlayerController* NewPlayer)
 {
@@ -16,27 +18,77 @@ void ALobbyGameMode::PostLogin(APlayerController* NewPlayer)
 		UMultiplayerSessionsSubsystem* Subsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>();
 		check(Subsystem);
 
-		if (NumberOfPlayers == Subsystem->DesiredNumPublicConnections)
-		{
-			UWorld* World = GetWorld();
-			if (World)
-			{
-				bUseSeamlessTravel = true;
+		ATPSController* TPSController = Cast<ATPSController>(NewPlayer);
+		TPSController->CreatePlayerListWidget();
 
-				FString MatchType = Subsystem->DesiredMatchType;
-				if (MatchType == "FreeForAll")
-				{
-					World->ServerTravel(FString("/Game/Asian_Village/maps/BlasterMap?listen"));
-				}
-				else if (MatchType == "Teams")
-				{
-					World->ServerTravel(FString("/Game/Asian_Village/maps/Teams?listen"));
-				}
-				else if (MatchType == "CaptureTheFlag")
-				{
-					World->ServerTravel(FString("/Game/Asian_Village/maps/CaptureTheFlag?listen"));
-				}
+		FTimerHandle PlayerUpdateHandle;
+		FTimerDelegate PlayerUpdateDelegate;
+		PlayerUpdateDelegate.BindUFunction(this, FName("UpdatePlayerList"));
+		GetWorldTimerManager().SetTimer(PlayerUpdateHandle, PlayerUpdateDelegate, 0.3f, false);
+	}
+}
+
+void ALobbyGameMode::Logout(AController* Exiting)
+{
+	FTimerHandle PlayerUpdateHandle;
+	FTimerDelegate PlayerUpdateDelegate;
+	PlayerUpdateDelegate.BindUFunction(this, FName("UpdatePlayerList"));
+	GetWorldTimerManager().SetTimer(PlayerUpdateHandle, PlayerUpdateDelegate, 0.3f, false);
+}
+
+void ALobbyGameMode::SendChat(const FString& Text, const FString& PlayerName)
+{
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		ATPSController* TPSPlayerController = Cast<ATPSController>(*It);
+		if (TPSPlayerController)
+		{
+			TPSPlayerController->ClientSetText(Text, PlayerName);
+		}
+	}
+}
+
+void ALobbyGameMode::DefocusFromUI()
+{
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		ATPSController* TPSPlayerController = Cast<ATPSController>(*It);
+		if (TPSPlayerController)
+		{
+			TPSPlayerController->DefocusUI();
+		}
+	}
+}
+
+void ALobbyGameMode::UpdatePlayerList()
+{
+	TArray<FPlayerStruct> PlayerList;
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		ATPSController* TPSPlayerController = Cast<ATPSController>(*It);
+		if (TPSPlayerController)
+		{
+			if (TPSPlayerController->GetRemoteRole() == ENetRole::ROLE_SimulatedProxy)
+			{
+				TPSPlayerController->PlayerStateStruct.PlayerReadyState = EPlayerReadyState::EPRS_Host;
 			}
+			ATPSPlayerState* PlayerState = TPSPlayerController->GetPlayerState<ATPSPlayerState>();
+
+			if (PlayerState)
+			{
+				TPSPlayerController->PlayerStateStruct.PlayerName = PlayerState->GetPlayerName();
+			}
+
+			PlayerList.Add(TPSPlayerController->PlayerStateStruct);
+		}
+	}
+
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		ATPSController* TPSPlayerController = Cast<ATPSController>(*It);
+		if (TPSPlayerController)
+		{
+			TPSPlayerController->UpdatePlayerList(PlayerList);
 		}
 	}
 }

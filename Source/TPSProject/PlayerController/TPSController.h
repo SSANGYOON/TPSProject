@@ -4,12 +4,33 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "TPSProject/Types/PlayerReadyState.h"
 #include "TPSController.generated.h"
 
+UENUM()
+enum class EPlayerReadyState : uint8
+{
+	EPRS_Waiting UMETA(DisplayName = "Waiting"),
+	EPRS_Ready UMETA(DisplayName = "Ready"),
+	EPRS_Host UMETA(DisplayName = "Host"),
+	EPRS_MAX UMETA(DisplayName = "DefaultMAX")
+};
+
+USTRUCT(BlueprintType)
+struct FPlayerStruct
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY()
+	FString PlayerName;
+
+	UPROPERTY()
+	EPlayerReadyState PlayerReadyState = EPlayerReadyState::EPRS_Waiting;
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FHighPingDelegate, bool, bPingTooHigh);
-/**
- * 
- */
+
 UCLASS()
 class TPSPROJECT_API ATPSController : public APlayerController
 {
@@ -36,8 +57,6 @@ public:
 	void SetHUDNewGameAgree(int32 Agree);
 	void SetHUDNewGameDisagree(int32 Disagree);
 
-
-
 	virtual float GetServerTime(); //서버 시간과 동기화
 	virtual void ReceivedPlayer() override; // 플레이어 접속시 실행 서버 시간 동기화
 	void OnMatchStateSet(FName State, bool bTeamsMatch = false);
@@ -50,6 +69,32 @@ public:
 	FHighPingDelegate HighPingDelegate;
 
 	void BroadcastElim(APlayerState* Attacker, APlayerState* Victim);
+
+	UFUNCTION(Client, Reliable)
+	void CreatePlayerListWidget();
+
+	UFUNCTION(Client, Reliable)
+	void UpdatePlayerList(const TArray<FPlayerStruct>& PlayerList);
+
+	UFUNCTION(Client, Reliable)
+	void Kicked();
+
+	FPlayerStruct PlayerStateStruct;
+
+	UFUNCTION(Server, Reliable)
+	void ServerPlayerReady();
+
+	UFUNCTION()
+	void TravelToBlasterMap();
+
+	UFUNCTION(Client, Reliable)
+	void DefocusUI();
+
+	UFUNCTION(Server, Reliable)
+	void ServerCheckMatchState();
+
+	UFUNCTION(Client, Reliable)
+	void ClientJoinMidgame(FName StateOfMatch, float Warmup, float Match, float Cooldown, float Vote, float StartingTime);
 protected:
 	virtual void BeginPlay() override;
 	void SetHUDTime();
@@ -78,12 +123,6 @@ protected:
 	float TimeSyncRunningTime = 0.f;
 	void CheckTimeSync(float DeltaTime);
 
-	UFUNCTION(Server, Reliable)
-	void ServerCheckMatchState();
-
-	UFUNCTION(Client, Reliable)
-	void ClientJoinMidgame(FName StateOfMatch, float Warmup, float Match, float Cooldown, float Vote, float StartingTime);
-
 	void HighPingWarning();
 	void StopHighPingWarning();
 	void CheckPing(float DeltaTime);
@@ -101,6 +140,7 @@ protected:
 
 	FString GetInfoText(const TArray<class ATPSPlayerState*>& Players);
 	FString GetTeamsInfoText(class ATPSGameState* TPSGameState);
+
 public:
 	void AddChat();
 
@@ -124,10 +164,10 @@ public:
 private:
 	UPROPERTY(EditAnywhere, Category = HUD)
 	TSubclassOf<class UChatOverlay> ChatOverlayClass;
+
 	UPROPERTY()
 	UChatOverlay* ChatWidget;
 
-private:
 	UPROPERTY()
 	class ATPSHUD* TPSHUD;
 
@@ -196,4 +236,12 @@ private:
 
 	UPROPERTY(EditAnywhere, Category = Input)
 	class UInputAction* EnterKeyAction;
+
+	UPROPERTY(VisibleAnywhere, Category = Widget)
+	class UPlayerList* PlayerListWidget;
+
+	UPROPERTY(EditAnywhere, Category = Widget)
+	TSubclassOf<UPlayerList> PlayerListWidgetClass;
+
+	bool bHudSet = false;
 };

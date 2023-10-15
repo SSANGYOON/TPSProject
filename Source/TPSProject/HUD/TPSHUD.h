@@ -79,6 +79,8 @@ private:
 
 	UPROPERTY(EditAnywhere)
 	TSubclassOf<UVoteForNewGame> VoteForNewGameClass;
+
+	friend class ATPSController;
 public:
 	FORCEINLINE void SetHUDPackage(const FHUDPackage& Package) { HUDPackage = Package; }
 };

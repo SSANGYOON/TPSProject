@@ -22,12 +22,37 @@
 #include "TPSProject/HUD/ChatOverlay.h"
 #include "TPSProject/HUD/VoteForNewGame.h"
 #include "Components/EditableText.h"
+#include "TPSProject/Weapon/Weapon.h"
+#include "TPSProject/GameMode/LobbyGameMode.h"
+#include "TPSProject/HUD/PlayerList.h"
+#include "MultiplayerSessionsSubsystem.h"
+
+void ATPSController::TravelToBlasterMap()
+{
+	ALobbyGameMode* LobbyGameMode = Cast<ALobbyGameMode>(UGameplayStatics::GetGameMode(this));
+	if (LobbyGameMode)
+	{
+		LobbyGameMode->DefocusFromUI();
+	}
+
+	UWorld* World = GetWorld();
+	World->ServerTravel(FString("/Game/Asian_Village/maps/Teams?listen"));
+}
+
+void ATPSController::DefocusUI_Implementation()
+{
+	FInputModeGameOnly InputMode;
+	SetInputMode(InputMode);
+	SetShowMouseCursor(false);
+}
 
 void ATPSController::BeginPlay()
 {
 	Super::BeginPlay();
 
 	TPSHUD = Cast<ATPSHUD>(GetHUD());
+
+
 	ServerCheckMatchState();
 
 	AddChat();
@@ -100,6 +125,11 @@ void ATPSController::ServerSetText_Implementation(const FString& Text, const FSt
 	if (TPSGameMode)
 	{
 		TPSGameMode->SendChat(Text, PlayerName);
+	}
+	else
+	{
+		ALobbyGameMode* LobbyGameMode = Cast<ALobbyGameMode>(UGameplayStatics::GetGameMode(this));
+		LobbyGameMode->SendChat(Text, PlayerName);
 	}
 }
 
@@ -176,7 +206,7 @@ void ATPSController::InitTeamScores()
 	if (bHUDValid)
 	{
 		FString Zero("0");
-		FString Spacer("|");
+		FString Spacer("VS");
 		TPSHUD->CharacterOverlay->RedTeamScore->SetText(FText::FromString(Zero));
 		TPSHUD->CharacterOverlay->BlueTeamScore->SetText(FText::FromString(Zero));
 		TPSHUD->CharacterOverlay->ScoreSpacerText->SetText(FText::FromString(Spacer));
@@ -243,6 +273,11 @@ void ATPSController::Tick(float DeltaTime)
 	CheckTimeSync(DeltaTime);
 	PollInit();
 	CheckPing(DeltaTime);
+
+	if (!bHudSet && HasAuthority())
+	{
+		ServerCheckMatchState();
+	}
 }
 
 void ATPSController::CheckPing(float DeltaTime)
@@ -444,6 +479,7 @@ void ATPSController::ServerCheckMatchState_Implementation()
 		VoteTime = GameMode->VoteTime;
 		MatchState = GameMode->GetMatchState();
 		ClientJoinMidgame(MatchState, WarmupTime, MatchTime, CooldownTime, VoteTime, LevelStartingTime);
+		bHudSet = true;
 	}
 }
 
@@ -461,6 +497,7 @@ void ATPSController::ClientJoinMidgame_Implementation(FName StateOfMatch, float 
 	{
 		TPSHUD->AddAnnouncement();
 	}
+	bHudSet = true;
 }
 
 void ATPSController::OnPossess(APawn* InPawn)
@@ -804,6 +841,17 @@ void ATPSController::OnRep_MatchState()
 	}
 }
 
+void ATPSController::ServerPlayerReady_Implementation()
+{
+	if (PlayerStateStruct.PlayerReadyState == EPlayerReadyState::EPRS_Waiting)
+		PlayerStateStruct.PlayerReadyState = EPlayerReadyState::EPRS_Ready;
+	else
+		PlayerStateStruct.PlayerReadyState = EPlayerReadyState::EPRS_Waiting;
+
+	ALobbyGameMode* LobbyGameMode = Cast<ALobbyGameMode>(UGameplayStatics::GetGameMode(this));
+	LobbyGameMode->UpdatePlayerList();
+}
+
 void ATPSController::HandleMatchHasStarted(bool bTeamsMatch)
 {
 	if (HasAuthority()) bShowTeamScores = bTeamsMatch;
@@ -843,7 +891,7 @@ void ATPSController::HandleCooldown()
 		if (TPSHUD)
 		{
 			TPSHUD->Announcement->SetVisibility(ESlateVisibility::Visible);
-			FString AnnouncementText = Announcement::NewMatchStartsIn;
+			FString AnnouncementText = Announcement::VoteForNewGameStartsIn;
 			TPSHUD->Announcement->AnnouncementText->SetText(FText::FromString(AnnouncementText));
 
 			ATPSGameState* TPSGameState = Cast<ATPSGameState>(UGameplayStatics::GetGameState(this));
@@ -891,6 +939,50 @@ void ATPSController::StartVote()
 void ATPSController::BroadcastElim(APlayerState* Attacker, APlayerState* Victim)
 {
 	ClientElimAnnouncement(Attacker, Victim);
+}
+
+void ATPSController::CreatePlayerListWidget_Implementation()
+{
+	PlayerListWidget = CreateWidget<UPlayerList>(this, PlayerListWidgetClass);
+	PlayerListWidget->AddToViewport();
+	if (PlayerListWidget)
+	{
+		FInputModeGameAndUI InputModeData;
+		InputModeData.SetWidgetToFocus(PlayerListWidget->TakeWidget());
+		this->SetInputMode(InputModeData);
+		this->SetShowMouseCursor(true);
+
+		FString ReadyText;
+		if (HasAuthority())
+		{
+			ReadyText = "Start";
+		}
+		else
+		{
+			ReadyText = "Ready";
+		}
+
+		PlayerListWidget->ReadyText->SetText(FText::FromString(ReadyText));
+	}
+}
+
+void ATPSController::UpdatePlayerList_Implementation(const TArray<FPlayerStruct>& PlayerList)
+{
+	if (PlayerListWidget)
+	{
+		PlayerListWidget->UpdateWidget(PlayerList);
+	}
+}
+
+void ATPSController::Kicked_Implementation()
+{
+	UGameInstance* GameInstance = GetGameInstance();
+	if (GameInstance)
+	{
+		UMultiplayerSessionsSubsystem* MultiplayerSessionsSubsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>();
+		ClientReturnToMainMenuWithTextReason(FText());
+		MultiplayerSessionsSubsystem->DestroySession();
+	}
 }
 
 void ATPSController::ClientElimAnnouncement_Implementation(APlayerState* Attacker, APlayerState* Victim)

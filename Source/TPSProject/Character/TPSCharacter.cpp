@@ -37,6 +37,8 @@
 #include "NiagaraFunctionLibrary.h"
 #include "TPSProject/GameState/TPSGameState.h"
 #include "TPSProject/PlayerStart/TeamPlayerStart.h"
+#include "TPSProject/HUD/OverheadWidget.h"
+#include "Components/TextBlock.h"
 
 ATPSCharacter::ATPSCharacter()
 {
@@ -372,6 +374,16 @@ void ATPSCharacter::OnPlayerStateInitialized()
 	TPSPlayerState->AddToDefeats(0);
 	SetTeamColor(TPSPlayerState->GetTeam());
 	SetSpawnPoint();
+
+	if (HasAuthority() && this->IsLocallyControlled())
+	{
+		TPSPlayerState->SetHost();
+	}
+	if (OverheadWidget)
+	{
+		UOverheadWidget* OverheadWidgetInstance = Cast<UOverheadWidget>(OverheadWidget->GetWidget());
+		OverheadWidgetInstance->DisplayText->SetText(FText::FromString(TPSPlayerState->GetPlayerName()));
+	}
 }
 
 void ATPSCharacter::SetSpawnPoint()
@@ -1044,7 +1056,20 @@ void ATPSCharacter::PollInit()
 				MulticastGainedTheLead();
 			}
 		}
+		else
+		{
+			APlayerState* NativePlayerState = GetPlayerState<APlayerState>();
+			if (NativePlayerState)
+			{
+				if (OverheadWidget)
+				{
+					UOverheadWidget* OverheadWidgetInstance = Cast<UOverheadWidget>(OverheadWidget->GetWidget());
+					OverheadWidgetInstance->DisplayText->SetText(FText::FromString(NativePlayerState->GetPlayerName()));
+				}
+			}
+		}
 	}
+
 }
 
 void ATPSCharacter::SetOverlappingWeapon(AWeapon* Weapon)

@@ -43,7 +43,12 @@ private:
 	UFUNCTION()
 	void OnRep_Team();
 
+	UPROPERTY(Replicated)
+	bool bIsHost = false;
+
 public:
 	FORCEINLINE ETeam GetTeam() const { return Team; }
 	void SetTeam(ETeam TeamToSet);
+
+	FORCEINLINE void SetHost() { bIsHost = true; }
 };

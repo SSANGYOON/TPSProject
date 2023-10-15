@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "WeaponTypes.h"
 #include "TPSProject/Types/Team.h"
+#include "Engine/DataTable.h"
 #include "Weapon.generated.h"
 
 UENUM(BlueprintType)
@@ -27,6 +28,21 @@ enum class EFireType : uint8
 	EFT_Shotgun UMETA(DisplayName = "Shotgun Weapon"),
 
 	EFT_MAX UMETA(DisplayName = "DefaultMAX")
+};
+
+USTRUCT(BlueprintType)
+struct FWeaponDataTable : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EWeaponType WeaponType;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString ItemName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UTexture2D* InventoryIcon;
 };
 
 UCLASS()
@@ -103,6 +119,8 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void OnConstruction(const FTransform& Transform) override;
+
 	virtual void OnWeaponStateSet();
 	virtual void OnEquipped();
 	virtual void OnDropped();
@@ -162,7 +180,7 @@ private:
 	UPROPERTY(EditAnywhere)
 	TSubclassOf<class ACasing> CasingClass;
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	int32 Ammo;
 
 	UFUNCTION(Client, Reliable)
@@ -173,7 +191,7 @@ private:
 
 	void SpendRound();
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	int32 MagCapacity;
 
 	// The number of unprocessed server requests for Ammo.
@@ -182,6 +200,12 @@ private:
 
 	UPROPERTY(EditAnywhere)
 	EWeaponType WeaponType;
+
+	UPROPERTY(VisibleAnywhere, BluePrintReadOnly, meta = (AllowPrivateAccess = "true"))
+	FString WeaponName;
+
+	UPROPERTY(VisibleAnywhere, BluePrintReadOnly, meta = (AllowPrivateAccess = "true"))
+	UTexture2D* WeaponIcon;
 
 public:
 	void SetWeaponState(EWeaponState State);
@@ -201,4 +225,5 @@ public:
 	FORCEINLINE float GetDamage() const { return Damage; }
 	FORCEINLINE float GetHeadShotDamage() const { return HeadShotDamage; }
 	FORCEINLINE ETeam GetTeam() const { return Team; }
+	FORCEINLINE UTexture2D* GetWeaponIcon() const { return WeaponIcon; }
 };

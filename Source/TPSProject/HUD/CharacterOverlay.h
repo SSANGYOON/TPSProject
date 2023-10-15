@@ -59,4 +59,10 @@ public:
 
 	UPROPERTY(meta = (BindWidgetAnim), Transient)
 	UWidgetAnimation* HighPingAnimation;
+
+	UPROPERTY(meta = (BindWidget))
+	class UImage* EquippedWeaponIcon;
+
+	UPROPERTY(meta = (BindWidget))
+	class UImage* SecondaryWeaponIcon;
 };

@@ -10,6 +10,7 @@
 #include "Engine/SkeletalMeshSocket.h"
 #include "TPSProject/TPSComponent/CombatComponent.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "TPSProject/HUD/WeaponPickupWidget.h"
 
 AWeapon::AWeapon()
 {
@@ -57,6 +58,54 @@ void AWeapon::BeginPlay()
 	if (PickupWidget)
 	{
 		PickupWidget->SetVisibility(false);
+		UWeaponPickupWidget* PickupWidgetObject = Cast<UWeaponPickupWidget>(PickupWidget->GetUserWidgetObject());
+		if (PickupWidgetObject)
+		{
+			PickupWidgetObject->OwningWeapon = this;
+		}
+	}
+}
+
+void AWeapon::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	const FString WeaponDataTablePath = TEXT("DataTable'/Game/Assets/DataTable/WeaponUITable.WeaponUITable'");
+	UDataTable* WeaponTableObject = Cast<UDataTable>(StaticLoadObject(UDataTable::StaticClass(), nullptr, *WeaponDataTablePath));
+	if (WeaponTableObject)
+	{
+		FWeaponDataTable* WeaponDataRow = nullptr;
+		
+		switch (WeaponType)
+		{
+		case EWeaponType::EWT_SubmachineGun:
+			WeaponDataRow = WeaponTableObject->FindRow<FWeaponDataTable>(FName("SubmachineGun"), TEXT(""));
+			break;
+		case EWeaponType::EWT_AssaultRifle:
+			WeaponDataRow = WeaponTableObject->FindRow<FWeaponDataTable>(FName("AssaultRifle"), TEXT(""));
+			break;
+		case EWeaponType::EWT_GrenadeLauncher:
+			WeaponDataRow = WeaponTableObject->FindRow<FWeaponDataTable>(FName("GrenadeLauncher"), TEXT(""));
+			break;
+		case EWeaponType::EWT_Pistol:
+			WeaponDataRow = WeaponTableObject->FindRow<FWeaponDataTable>(FName("Pistol"), TEXT(""));
+			break;
+		case EWeaponType::EWT_RocketLauncher:
+			WeaponDataRow = WeaponTableObject->FindRow<FWeaponDataTable>(FName("RocketLauncher"), TEXT(""));
+			break;
+		case EWeaponType::EWT_SniperRifle:
+			WeaponDataRow = WeaponTableObject->FindRow<FWeaponDataTable>(FName("SniperRifle"), TEXT(""));
+			break;
+		case EWeaponType::EWT_Shotgun:
+			WeaponDataRow = WeaponTableObject->FindRow<FWeaponDataTable>(FName("Shotgun"), TEXT(""));
+			break;
+		}
+
+		if (WeaponDataRow)
+		{
+			WeaponName = WeaponDataRow->ItemName;
+			WeaponIcon = WeaponDataRow->InventoryIcon;
+		}
 	}
 }
 
